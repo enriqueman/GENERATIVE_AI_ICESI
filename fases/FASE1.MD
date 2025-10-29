@@ -586,6 +586,10 @@ Diseñar un diagrama de flujo detallado del proceso de devolución que muestre l
 
 ### 🔄 Diagrama de Flujo del Proceso de Devolución
 
+![Diagrama de Flujo del Proceso de Devolución](../data/devolucion.svg)
+
+#### Diagrama Detallado (Textual)
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                  1. ENTRADA DE USUARIO                          │

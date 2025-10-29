@@ -8,11 +8,23 @@ La conceptualización que desarrollamos comenzó identificando las limitaciones 
 
 ## Definición de las Herramientas del Sistema
 
+### Arquitectura General del Sistema
+
+El sistema EcoMarket implementa una arquitectura multi-agente donde tres agentes especializados coordinan el uso de cinco herramientas específicas para proporcionar capacidades completas de atención al cliente. La arquitectura que diseñamos separa claramente las responsabilidades entre coordinación, razonamiento y generación de respuestas, permitiendo que cada componente se especialice en su función específica.
+
+![Arquitectura del Sistema EcoMarket](../data/arquitectura_simple.svg)
+
 ### Conceptualización de Capacidades Requeridas
 
 Antes de implementar código, realizamos análisis exhaustivo de los requisitos funcionales del sistema, identificando las capacidades fundamentales que el agente necesitaría para servir efectivamente como asistente de atención al cliente para EcoMarket. El análisis que llevamos a cabo identificó cinco categorías principales de funcionalidad que el sistema requeriría: recuperación de información documental, verificación de inventario de productos, gestión de casos de clientes mediante tickets, procesamiento inteligente de consultas de usuario, y mantenimiento de contexto conversacional.
 
 Para cada una de estas capacidades que identificamos, diseñamos herramientas especializadas que encapsulan la lógica específica del dominio. Esta aproximación de diseño que adoptamos sigue principios de responsabilidad única donde cada herramienta resuelve un problema claramente definido, facilita testing y mantenimiento independiente de componentes, y permite extensión del sistema mediante agregar nuevas herramientas sin modificar código existente.
+
+### Ecosistema de Herramientas y sus Interacciones
+
+El sistema que diseñamos utiliza cinco herramientas especializadas que el Agente Orquestador invoca según el tipo de consulta y la información requerida. Cada herramienta tiene responsabilidades específicas y accede a fuentes de datos particulares, creando un ecosistema modular donde las capacidades se pueden extender fácilmente.
+
+![Herramientas del Sistema EcoMarket](../data/herramientas.svg)
 
 ### DocumentRetriever: Capacidades de Recuperación RAG
 
@@ -62,6 +74,8 @@ Diseñamos el flujo de trabajo para el proceso de devolución como caso de uso r
 
 ![Diagrama de Flujo del Proceso de Devolución](../data/devolucion.svg)
 
+![Flujo de Decisión del Agente](../data/flujo.svg)
+
 El diagrama visual que presentamos muestra el flujo completo desde entrada del usuario hasta generación de respuesta final, ilustrando cada punto de decisión donde el agente evalúa qué acción tomar y qué herramientas invocar. Este flujo que diseñamos no es simplemente secuencial sino incluye bucles de retroalimentación donde el sistema detecta información faltante y solicita datos adicionales antes de proceder con acciones irrevocables.
 
 ### Análisis del Proceso Detallado
@@ -79,6 +93,12 @@ Identificamos ocho herramientas específicas que el sistema invoca durante proce
 El orden de invocación que establecimos refleja dependencias lógicas entre herramientas: memoria debe gestionarse temprano para que información esté disponible para procesamiento posterior, clasificación debe ocurrir antes de ejecución de herramientas específicas para que sistema sepa qué herramientas invocar, y creación de ticket ocurre final en flujo solo después de toda validación y procesamiento previo. Esta secuencia que diseñamos optimiza tanto eficiencia computacional como calidad de resultados generados.
 
 ## Selección del Marco de Agentes
+
+### Integración con LangChain Framework
+
+La selección de LangChain como framework principal para nuestro sistema multi-agente se fundamenta en su capacidad para integrar herramientas personalizadas de manera seamless y proporcionar trazabilidad completa de todas las operaciones. El diagrama que presentamos ilustra cómo LangChain facilita la implementación de nuestra arquitectura multi-agente.
+
+![Integración con LangChain](../data/LangChain.svg)
 
 ### Análisis Comparativo de Frameworks
 

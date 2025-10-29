@@ -6,8 +6,6 @@ Este proyecto implementa un sistema de generación aumentada por recuperación (
 
 ## 👥 Integrantes
 
-- Claudia Martinez
-- Mario Castellanos  
 - Enrique Manzano
 
 ## 🎯 Objetivos del Proyecto

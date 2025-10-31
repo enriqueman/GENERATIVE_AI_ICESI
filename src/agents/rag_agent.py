@@ -600,34 +600,48 @@ No hay productos disponibles en nuestro inventario actual.
             
             if ticket_match:
                 # Hay número de ticket → es consulta, no creación
-                return self._handle_consulta_ticket(question, query_info)
+                return self._handle_consulta_ticket(question, query_info, trace_id=trace_id, session_info=session_info)
             
-            # Prioridad 2: ¿Palabras clave explícitas de consulta?
-            consult_keywords = [
-                "consultar", "ver", "mostrar", "buscar", "encontrar",
-                "estado del", "información del", "datos del",
-                "mi ticket", "mis tickets", "historial de",
-                "qué estado", "está mi ticket"
-            ]
-            is_consultation = any(keyword in question_lower for keyword in consult_keywords) and "ticket" in question_lower
-            
-            if is_consultation:
-                return self._handle_consulta_ticket(question, query_info)
-            
-            # Prioridad 3: Palabras clave de creación de ticket
+            # Prioridad 2: ¿Palabras clave explícitas de CREACIÓN?
+            # Verificar primero si hay palabras clave de creación ANTES de verificar consulta
             creation_keywords = [
+                "crear", "crea", "generar", "genera", "nuevo", "radicar", "radica", "abrir", "abre",
                 "devolver", "devolución", "retornar",
                 "necesito devolver", "quiero devolver", "solicitar devolución",
-                "reclamo", "queja", "felicitación"
+                "reclamo", "queja", "felicitación",
+                "crear un ticket", "crear ticket", "hacer un ticket", "crea un ticket", "crea ticket",
+                "ticket de compra", "ticket de orden", "orden de compra"
             ]
             is_creation = any(keyword in question_lower for keyword in creation_keywords)
             
-            if not is_creation:
-                # No es claro si es creación o consulta, intentar ambos
-                # Pero primero verificar si menciona "ticket" sin verbo de acción
+            # Prioridad 3: ¿Palabras clave explícitas de consulta?
+            consult_keywords = [
+                "consultar", "consultar", "ver", "mostrar", "buscar", "encontrar",
+                "estado del", "información del", "datos del",
+                "mi ticket", "mis tickets", "historial de",
+                "qué estado", "está mi ticket", "tengo asociados", "asociados a",
+                "listar", "lista", "cuáles", "cuales", "que tickets"
+            ]
+            is_consultation = any(keyword in question_lower for keyword in consult_keywords) and ("ticket" in question_lower or "cuenta" in question_lower)
+            
+            # Si es claramente una creación (tiene palabras de creación), procesar como creación
+            # IMPORTANTE: La creación tiene prioridad sobre la consulta
+            if is_creation:
+                # Es creación, continuar con el flujo de creación
+                pass
+            # Si es claramente una consulta Y NO es creación, procesar como consulta
+            elif is_consultation:
+                return self._handle_consulta_ticket(question, query_info, trace_id=trace_id, session_info=session_info)
+            
+            # Si no es creación ni consulta clara, verificar si menciona "ticket"
+            if not is_creation and not is_consultation:
                 if "ticket" in question_lower:
-                    # Asumir que es consulta si no hay verbo de acción claro
-                    return self._handle_consulta_ticket(question, query_info)
+                    # Si contiene "crear" u otra palabra de acción, es creación
+                    if any(word in question_lower for word in ["crear", "crea", "generar", "genera", "nuevo", "radicar", "radica", "hacer"]):
+                        is_creation = True
+                    else:
+                        # Asumir que es consulta si no hay verbo de acción claro
+                        return self._handle_consulta_ticket(question, query_info, trace_id=trace_id, session_info=session_info)
             
             # Si llegamos aquí, es creación de ticket
             # Extraer información del cliente (de la consulta, memoria y session_info si existe)
@@ -643,8 +657,8 @@ No hay productos disponibles en nuestro inventario actual.
             elif any(word in question_lower for word in ["factura", "recibo"]):
                 return self._handle_factura_query(question, cliente_info, query_info)
             
-            elif any(word in question_lower for word in ["comprar", "pedir", "ordenar", "quiero", "radicar", "ticket"]):
-                return self._handle_compra_ticket(question, cliente_info, query_info)
+            elif any(word in question_lower for word in ["comprar", "compra", "pedir", "ordenar", "orden", "quiero", "radicar", "ticket"]):
+                return self._handle_compra_ticket(question, cliente_info, query_info, trace_id=trace_id)
             
             elif any(word in question_lower for word in ["reclamo", "queja", "felicitación"]):
                 return self._handle_queja_ticket(question, cliente_info, query_info)
@@ -858,7 +872,7 @@ Por favor, proporciona esta información para procesar tu solicitud.
         except Exception as e:
             return "Lo siento, necesito más información. Por favor, proporcione su email y número de factura."
     
-    def _handle_compra_ticket(self, question: str, cliente_info: dict, query_info: dict) -> str:
+    def _handle_compra_ticket(self, question: str, cliente_info: dict, query_info: dict, trace_id: str = None) -> str:
         """Manejar solicitudes de compra y crear ticket de compra"""
         try:
             import re
@@ -888,15 +902,23 @@ Por favor, proporciona esta información para procesar tu solicitud.
             
             # Si no se encontró con patrones, buscar productos mencionados de forma más general
             if not productos_text:
-                productos_match = re.search(r'(?:ticket de compra para|comprar|quiero|necesito|orden de compra)\s*(?:son|es|de)?\s*[:]?\s*([^.\n,]+)', question, re.IGNORECASE)
-                if productos_match:
-                    productos_text = productos_match.group(1).strip()
+                # Buscar "nombre producto X" o "producto X"
+                nombre_producto_match = re.search(r'nombre\s+producto\s+([^,\n\.]+)', question, re.IGNORECASE)
+                if nombre_producto_match:
+                    productos_text = nombre_producto_match.group(1).strip()
+                else:
+                    productos_match = re.search(r'(?:ticket de compra para|comprar|quiero|necesito|orden de compra|producto)\s*(?:son|es|de)?\s*[:]?\s*([^.\n,]+)', question, re.IGNORECASE)
+                    if productos_match:
+                        productos_text = productos_match.group(1).strip()
             
             # Limpiar y normalizar productos_text
             if productos_text:
-                productos_text = productos_text.replace('orden de compra de', '').replace('comprar', '').replace('ticket de compra para', '').replace('ticket de compra de', '').strip()
+                productos_text = productos_text.replace('orden de compra de', '').replace('comprar', '').replace('ticket de compra para', '').replace('ticket de compra de', '').replace('nombre producto', '').replace('producto', '').strip()
                 # Remover cantidad si está al inicio
                 productos_text = re.sub(r'^\d+\s+', '', productos_text).strip()
+                # Remover palabras comunes
+                productos_text = re.sub(r'\b(para|de|la|ciudad|del|el|un|una)\b', '', productos_text, flags=re.IGNORECASE).strip()
+                productos_text = re.sub(r'\s+', ' ', productos_text).strip()
             
             if not productos_text or productos_text.lower() in ['varios', '']:
                 # Intentar usar contexto de memoria
@@ -908,8 +930,18 @@ Por favor, proporciona esta información para procesar tu solicitud.
                 else:
                     productos_text = "Productos solicitados por el cliente"
             
-            # Extraer cantidad si está mencionada
-            cantidad_match = re.search(r'(\d+)\s*(?:unidades?|productos?|cargadores?|paneles?)', question, re.IGNORECASE)
+            # Extraer cantidad si está mencionada - mejorado para capturar "cantidad 2" o "2 cargadores"
+            cantidad_match = None
+            # Primero buscar patrones específicos como "cantidad 2", "2 cargadores solares", etc.
+            cantidad_patterns = [
+                r'cantidad\s+(\d+)',
+                r'(\d+)\s+(?:cargadores?|paneles?|unidades?|productos?)\s+(?:solares?|del|de)',
+                r'(\d+)\s*(?:cargadores?|paneles?|unidades?|productos?)',
+            ]
+            for pattern in cantidad_patterns:
+                cantidad_match = re.search(pattern, question, re.IGNORECASE)
+                if cantidad_match:
+                    break
             cantidad = int(cantidad_match.group(1)) if cantidad_match else 1
             
             # Extraer dirección de envío si está presente
@@ -1097,19 +1129,49 @@ Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto.
             cliente_info = self._get_cliente_info(question, trace_id, session_info=session_info)
             
             # Buscar número de ticket en la consulta
-            ticket_match = re.search(r'ticket\s*(?:número|numero|#)?\s*[:]?\s*([A-Z0-9\-]+)', question, re.IGNORECASE)
-            ticket_number = ticket_match.group(1) if ticket_match else None
+            # Formato esperado: TKT-XXXXXXXXXX-XXXXXXXX (solo este formato válido)
+            # Primero buscar el formato completo TKT-XXX-XXX
+            ticket_pattern = r'TKT[-]\d+[-][A-Z0-9]+'
+            ticket_match = re.search(ticket_pattern, question, re.IGNORECASE)
+            ticket_number = ticket_match.group(0) if ticket_match else None
             
-            # Extraer email del cliente
+            # Si no se encontró, buscar variantes como "ticket TKT-XXX-XXX" o "ticket número TKT-XXX-XXX"
+            if not ticket_number:
+                alt_pattern = r'ticket\s*(?:número|numero|#)?\s*[:]?\s*(TKT[-]\d+[-][A-Z0-9]+)'
+                alt_match = re.search(alt_pattern, question, re.IGNORECASE)
+                if alt_match and alt_match.lastindex:
+                    ticket_number = alt_match.group(1)
+            
+            # Extraer email del cliente (prioridad: session_info > memoria > extracción)
             cliente_email = cliente_info.get('email')
             
-            # Consultar tickets
-            if ticket_number:
+            # Si no hay email pero hay session_info, usar el email de session_info
+            if not cliente_email and session_info and session_info.get("email"):
+                cliente_email = session_info.get("email")
+            
+            # Log para debugging
+            tracer.log(
+                operation="CONSULT_TICKET_DEBUG",
+                message=f"Consultando tickets - ticket_number: {ticket_number}, cliente_email: {cliente_email}, question: {question[:100]}",
+                level="INFO",
+                trace_id=trace_id
+            )
+            
+            # CRÍTICO: Si no hay ticket_number pero hay cliente_email, buscar por email
+            # Si hay ticket_number Y cliente_email, preferir ticket_number (es más específico)
+            if ticket_number and len(ticket_number) > 3:  # Validar que sea un número de ticket válido
                 # Consultar ticket específico
                 result = consultar_ticket(ticket_number=ticket_number)
             elif cliente_email:
                 # Consultar tickets del cliente por email
                 result = consultar_ticket(cliente_email=cliente_email)
+                # Log adicional para debugging
+                tracer.log(
+                    operation="CONSULT_TICKET_BY_EMAIL",
+                    message=f"Buscando tickets por email: {cliente_email}",
+                    level="INFO",
+                    trace_id=trace_id
+                )
             else:
                 return """
 🔍 **Consulta de Ticket**

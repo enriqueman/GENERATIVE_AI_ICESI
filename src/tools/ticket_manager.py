@@ -567,6 +567,12 @@ def consultar_ticket(
         # Buscar múltiples tickets
         if cliente_email:
             tickets = list_tickets(cliente_email=cliente_email, estado=estado)
+            # Log para debugging
+            tracer.log(
+                operation="LIST_TICKETS_BY_EMAIL",
+                message=f"Buscando tickets para email: {cliente_email}, encontrados: {len(tickets) if tickets else 0}",
+                level="INFO"
+            )
         elif estado:
             tickets = list_tickets(estado=estado)
         else:
@@ -580,7 +586,7 @@ def consultar_ticket(
         if not tickets:
             return {
                 "exito": False,
-                "mensaje": "No se encontraron tickets",
+                "mensaje": f"No se encontraron tickets para el email {cliente_email if cliente_email else ''}",
                 "tickets": []
             }
         

@@ -75,6 +75,16 @@ class ResponseAgent:
         Returns:
             str: Respuesta amigable y conversacional
         """
+        # Check for OTP tool results - these should be returned directly
+        for tool_name in ["otp_send", "otp_verify"]:
+            if tool_name in tool_results.get("data", {}):
+                tool_data = tool_results["data"][tool_name]
+                if isinstance(tool_data, dict) and "result" in tool_data:
+                    result = tool_data["result"]
+                    if isinstance(result, dict) and "message" in result:
+                        # Return OTP tool message directly (already formatted)
+                        return result["message"]
+        
         if not self.llm_response:
             return self._format_simple_response(tool_results)
         
@@ -143,7 +153,10 @@ class ResponseAgent:
             if isinstance(data, dict):
                 if "result" in data:
                     result = data["result"]
-                    if isinstance(result, str):
+                    # Check if result is a dict with a "message" key (OTP tool results)
+                    if isinstance(result, dict) and "message" in result:
+                        formatted += result["message"]
+                    elif isinstance(result, str):
                         formatted += result
                     else:
                         formatted += str(result)
@@ -166,8 +179,13 @@ class ResponseAgent:
             if isinstance(data, dict):
                 if "result" in data:
                     result = data["result"]
-                    if isinstance(result, str):
+                    # Check if result is a dict with a "message" key (OTP tool results)
+                    if isinstance(result, dict) and "message" in result:
+                        response += result["message"] + "\n\n"
+                    elif isinstance(result, str):
                         response += result + "\n\n"
+                    else:
+                        response += str(result) + "\n\n"
                 elif "mensaje" in data:
                     response += data["mensaje"] + "\n\n"
             elif isinstance(data, str):

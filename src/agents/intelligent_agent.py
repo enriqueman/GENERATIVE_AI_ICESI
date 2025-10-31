@@ -48,7 +48,7 @@ class IntelligentAgent:
         """Verificar si el agente está listo"""
         return self.orchestrator.is_ready()
     
-    def process_query(self, query: str, enable_logging: bool = False, session_id: str = None) -> str:
+    def process_query(self, query: str, enable_logging: bool = False, session_id: str = None, is_authenticated: bool = False) -> str:
         """
         Procesar una consulta del usuario de manera inteligente.
         
@@ -63,6 +63,7 @@ class IntelligentAgent:
             query: Consulta del usuario
             enable_logging: Habilitar logging detallado
             session_id: ID de sesión del usuario (opcional)
+            is_authenticated: Si el usuario está autenticado (opcional)
             
         Returns:
             str: Respuesta amigable del agente
@@ -107,9 +108,9 @@ class IntelligentAgent:
                     }
                 ):
                     # Ahora ejecutar todo el flujo dentro del contexto
-                    return self._process_query_flow(query, trace_id, start_time, session_id)
+                    return self._process_query_flow(query, trace_id, start_time, session_id, is_authenticated)
             else:
-                return self._process_query_flow(query, trace_id, start_time, session_id)
+                return self._process_query_flow(query, trace_id, start_time, session_id, is_authenticated)
             
         except Exception as e:
             tracer.log(
@@ -122,7 +123,7 @@ class IntelligentAgent:
             # Respuesta de error amigable
             return self.response_agent.get_error_response(str(e))
     
-    def _process_query_flow(self, query: str, trace_id: str, start_time: float, session_id: str = None) -> str:
+    def _process_query_flow(self, query: str, trace_id: str, start_time: float, session_id: str = None, is_authenticated: bool = False) -> str:
         """Procesar el flujo completo de la consulta (con o sin LangSmith)"""
         
         # PASO 0: Gestionar memoria de sesión
@@ -130,7 +131,8 @@ class IntelligentAgent:
         self.orchestrator.store_user_info(session_id, query, trace_id)
         
         # Recuperar memoria existente para enriquecer el contexto
-        memory_context = self.orchestrator.retrieve_memory(session_id, trace_id)
+        # Pasar is_authenticated para que retrieve_memory filtre emails automáticamente
+        memory_context = self.orchestrator.retrieve_memory(session_id, trace_id, is_authenticated)
         
         # Enriquecer query con contexto de memoria si existe
         enriched_query = query
@@ -138,7 +140,8 @@ class IntelligentAgent:
             enriched_query = f"{query}\n\n{memory_context}"
         
         # PASO 1: Orchestrator analiza la consulta (enriquecida con memoria)
-        analysis = self.orchestrator.analyze_query(enriched_query, trace_id)
+        # Pasar is_authenticated para que no active OTP si ya está autenticado
+        analysis = self.orchestrator.analyze_query(enriched_query, trace_id, is_authenticated)
         
         tracer.log(
             operation="ORCHESTRATOR_ANALYSIS",

@@ -144,6 +144,30 @@ def init_database():
         )
     """)
     
+    # Create chat_users table for public chat authentication
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT,
+            authenticated BOOLEAN DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login DATETIME
+        )
+    """)
+    
+    # Create chat_sessions table for managing chat user sessions
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_token TEXT UNIQUE NOT NULL,
+            expires_at DATETIME NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES chat_users(id)
+        )
+    """)
+    
     # Initialize default chats if they don't exist
     cursor.execute("SELECT COUNT(*) FROM chat")
     if cursor.fetchone()[0] == 0:
@@ -604,6 +628,156 @@ def cleanup_expired_memories():
     except Exception as e:
         print(f"Error cleaning up memories: {e}")
         return 0
+    finally:
+        conn.close()
+
+# CRUD Operations for 'chat_users' table
+def create_chat_user(email: str, name: str = None) -> dict:
+    """Create a new chat user or return existing user"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Check if user exists
+        cursor.execute("SELECT id, email, name, authenticated FROM chat_users WHERE email = ?", (email,))
+        existing = cursor.fetchone()
+        
+        if existing:
+            user_id = existing[0]
+            # Update name if provided and different
+            if name and name != existing[2]:
+                cursor.execute("UPDATE chat_users SET name = ? WHERE id = ?", (name, user_id))
+                conn.commit()
+            return {
+                "id": user_id,
+                "email": existing[1],
+                "name": name or existing[2],
+                "authenticated": bool(existing[3])
+            }
+        else:
+            # Create new user
+            cursor.execute(
+                "INSERT INTO chat_users (email, name) VALUES (?, ?)",
+                (email, name)
+            )
+            user_id = cursor.lastrowid
+            conn.commit()
+            return {
+                "id": user_id,
+                "email": email,
+                "name": name,
+                "authenticated": False
+            }
+    except Exception as e:
+        print(f"Error creating chat user: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def get_chat_user_by_email(email: str) -> dict:
+    """Get chat user by email"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            "SELECT id, email, name, authenticated, created_at, last_login FROM chat_users WHERE email = ?",
+            (email,)
+        )
+        result = cursor.fetchone()
+        
+        if result:
+            return {
+                "id": result[0],
+                "email": result[1],
+                "name": result[2],
+                "authenticated": bool(result[3]),
+                "created_at": result[4],
+                "last_login": result[5]
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting chat user: {e}")
+        return None
+    finally:
+        conn.close()
+
+def mark_chat_user_authenticated(email: str) -> bool:
+    """Mark chat user as authenticated"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        from datetime import datetime
+        cursor.execute("""
+            UPDATE chat_users 
+            SET authenticated = 1, last_login = ? 
+            WHERE email = ?
+        """, (datetime.now().isoformat(), email))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error marking user as authenticated: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def create_chat_session(user_id: int, expires_in_hours: int = 24) -> str:
+    """Create a session token for chat user"""
+    import secrets
+    from datetime import datetime, timedelta
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        session_token = secrets.token_urlsafe(32)
+        expires_at = datetime.now() + timedelta(hours=expires_in_hours)
+        
+        cursor.execute(
+            "INSERT INTO chat_sessions (user_id, session_token, expires_at) VALUES (?, ?, ?)",
+            (user_id, session_token, expires_at.isoformat())
+        )
+        conn.commit()
+        return session_token
+    except Exception as e:
+        print(f"Error creating chat session: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def verify_chat_session(session_token: str) -> dict:
+    """Verify if chat session is valid"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT cs.user_id, cu.email, cu.name, cu.authenticated, cs.expires_at
+            FROM chat_sessions cs
+            JOIN chat_users cu ON cs.user_id = cu.id
+            WHERE cs.session_token = ?
+        """, (session_token,))
+        
+        result = cursor.fetchone()
+        
+        if result:
+            from datetime import datetime
+            expires_at = datetime.fromisoformat(result[4])
+            if expires_at > datetime.now():
+                return {
+                    "id": result[0],
+                    "email": result[1],
+                    "name": result[2],
+                    "authenticated": bool(result[3])
+                }
+        return None
+    except Exception as e:
+        print(f"Error verifying chat session: {e}")
+        return None
     finally:
         conn.close()
 

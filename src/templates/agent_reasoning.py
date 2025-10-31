@@ -22,9 +22,16 @@ HERRAMIENTAS DISPONIBLES:
 3. **TICKET_CREATE**: Crear tickets (devoluciones, compras, quejas, facturas)
 4. **TICKET_QUERY**: Consultar tickets existentes
 5. **DATABASE_QUERY**: Consultar base de datos
+6. **OTP_SEND**: Enviar código OTP a un correo electrónico (para autenticación)
+7. **OTP_VERIFY**: Verificar código OTP enviado por el usuario (para completar autenticación)
 
 NOTA: El sistema tiene acceso automático a memoria de sesión (información previa del usuario).
 Si la consulta del usuario menciona el contexto previo o datos personales, úsalos para proporcionar respuestas personalizadas.
+
+REGLA IMPORTANTE DE AUTENTICACIÓN:
+- Si el usuario proporciona un correo electrónico (ej: "correo@ejemplo.com") SIN un código de 6 dígitos, SIEMPRE usa la herramienta OTP_SEND
+- Si el usuario proporciona un correo electrónico Y un código de 6 dígitos (ej: "correo@ejemplo.com 123456"), SIEMPRE usa la herramienta OTP_VERIFY
+- NO uses otras herramientas (RAG_SEARCH, PRODUCT_SEARCH, etc.) cuando el usuario está proporcionando información de autenticación
 
 CONSULTA DEL USUARIO:
 {user_query}
@@ -76,6 +83,38 @@ Usuario: "¿Cuál es la política de devoluciones?"
     "intent": "Consultar política en documentos",
     "tools_needed": ["RAG_SEARCH"],
     "reasoning": "Pregunta sobre información documentada, usar RAG",
+    "requires_additional_info": false
+}
+
+Usuario: "Mi correo es juan@ejemplo.com y mi nombre es Juan Pérez"
+{
+    "intent": "Autenticarse en el sistema",
+    "tools_needed": ["OTP_SEND"],
+    "reasoning": "El usuario proporciona correo y nombre para autenticación, debo enviar código OTP",
+    "requires_additional_info": false
+}
+
+Usuario: "Mi correo es maria@ejemplo.com"
+{
+    "intent": "Autenticarse en el sistema",
+    "tools_needed": ["OTP_SEND"],
+    "reasoning": "El usuario proporciona correo electrónico para autenticación, debo enviar código OTP",
+    "requires_additional_info": false
+}
+
+Usuario: "juan@ejemplo.com 123456"
+{
+    "intent": "Verificar código OTP",
+    "tools_needed": ["OTP_VERIFY"],
+    "reasoning": "El usuario proporciona correo y código de 6 dígitos, debo verificar el OTP",
+    "requires_additional_info": false
+}
+
+Usuario: "El código es 456789 y mi correo es juan@ejemplo.com"
+{
+    "intent": "Verificar código OTP",
+    "tools_needed": ["OTP_VERIFY"],
+    "reasoning": "El usuario proporciona código OTP y correo, debo verificar el código",
     "requires_additional_info": false
 }
 

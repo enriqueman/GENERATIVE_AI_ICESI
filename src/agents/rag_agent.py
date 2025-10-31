@@ -630,8 +630,8 @@ No hay productos disponibles en nuestro inventario actual.
                     return self._handle_consulta_ticket(question, query_info)
             
             # Si llegamos aquí, es creación de ticket
-            # Extraer información del cliente
-            cliente_info = extraer_info_cliente(question)
+            # Extraer información del cliente (de la consulta y de memoria si existe)
+            cliente_info = self._get_cliente_info(question, trace_id)
             
             # Detectar tipo de ticket
             if any(word in question_lower for word in ["devolver", "devolución", "retornar"]):
@@ -705,22 +705,77 @@ No hay productos disponibles en nuestro inventario actual.
             return "Lo siento, necesito más información. Por favor, proporcione: su email, número de factura y producto a devolver."
     
     def _handle_seguimiento_query(self, question: str, cliente_info: dict, query_info: dict) -> str:
-        """Manejar consultas de seguimiento"""
+        """Manejar consultas de seguimiento y creación de guías de seguimiento"""
         try:
             import re
             
-            # Buscar número de seguimiento
-            seguimiento_match = re.search(r'(?:seguimiento|guía|número)\s*[:#]?\s*(\w+)', question, re.IGNORECASE)
-            numero_seguimiento = seguimiento_match.group(1) if seguimiento_match else None
+            question_lower = question.lower()
             
-            if numero_seguimiento:
-                result = consulta_seguimiento(numero_seguimiento=numero_seguimiento)
-                return result.get('mensaje', 'No se encontró información de seguimiento')
+            # Detectar si el usuario quiere CREAR una guía de seguimiento o SOLO CONSULTAR
+            create_keywords = ["crear", "generar", "solicitar", "necesito", "quiero", "hacer", "nueva"]
+            is_creating = any(keyword in question_lower for keyword in create_keywords) and (
+                "guía" in question_lower or "seguimiento" in question_lower
+            )
+            
+            if is_creating:
+                # Crear nueva guía de seguimiento
+                # Validar que se tenga email del cliente
+                if not cliente_info.get('email'):
+                    return """
+📦 **Crear Guía de Seguimiento**
+
+Para crear una guía de seguimiento, necesito:
+- Tu correo electrónico
+- Número de pedido (opcional)
+- Empresa de envío (opcional)
+
+Por favor, proporciona esta información para procesar tu solicitud.
+"""
+                
+                # Extraer información del pedido
+                pedido_match = re.search(r'(?:pedido|orden|compra|ticket)\s*[:#]?\s*([A-Z0-9\-]+)', question, re.IGNORECASE)
+                numero_pedido = pedido_match.group(1) if pedido_match else None
+                
+                # Extraer empresa de envío si se menciona
+                empresa_match = re.search(r'(?:empresa|transportadora|envío|envio|courier)\s*(?:es|:)?\s*([\w\s]+)', question, re.IGNORECASE)
+                empresa_envio = empresa_match.group(1).strip() if empresa_match else "Por definir"
+                
+                # Crear ticket de seguimiento
+                result = generar_guia_de_seguimiento(
+                    cliente_email=cliente_info.get('email'),
+                    numero_pedido=numero_pedido or "Sin número de pedido",
+                    empresa_envio=empresa_envio
+                )
+                
+                if result.get('exito'):
+                    return result.get('mensaje', 'Guía de seguimiento creada exitosamente')
+                else:
+                    return f"Hubo un problema al crear la guía: {result.get('mensaje', 'Error desconocido')}"
             else:
-                return "Para consultar el seguimiento, necesito el número de guía. Por favor, proporciónelo."
+                # Solo consultar seguimiento existente
+                seguimiento_match = re.search(r'(?:seguimiento|guía|número|ticket)\s*[:#]?\s*([A-Z0-9\-]+)', question, re.IGNORECASE)
+                numero_seguimiento = seguimiento_match.group(1) if seguimiento_match else None
+                
+                # También buscar número de ticket
+                ticket_match = re.search(r'TKT[-]\d+[-][A-Z0-9]+', question, re.IGNORECASE)
+                ticket_number = ticket_match.group(0) if ticket_match else None
+                
+                if numero_seguimiento:
+                    result = consulta_seguimiento(numero_seguimiento=numero_seguimiento)
+                    return result.get('mensaje', 'No se encontró información de seguimiento')
+                elif ticket_number:
+                    result = consulta_seguimiento(ticket_number=ticket_number)
+                    return result.get('mensaje', 'No se encontró información de seguimiento')
+                else:
+                    return "Para consultar el seguimiento, necesito el número de guía o número de ticket. Por favor, proporciónelo."
                 
         except Exception as e:
-            return "Lo siento, no pude consultar el seguimiento."
+            tracer.log(
+                operation="SEGUIMIENTO_QUERY_ERROR",
+                message=f"Error manejando consulta de seguimiento: {str(e)}",
+                level="ERROR"
+            )
+            return "Lo siento, no pude procesar tu solicitud de seguimiento."
     
     def _handle_factura_query(self, question: str, cliente_info: dict, query_info: dict) -> str:
         """Manejar solicitudes de factura"""
@@ -741,17 +796,85 @@ No hay productos disponibles en nuestro inventario actual.
             return "Lo siento, necesito más información. Por favor, proporcione su email y número de factura."
     
     def _handle_compra_ticket(self, question: str, cliente_info: dict, query_info: dict) -> str:
-        """Manejar solicitudes de compra"""
-        # Para compras, primero verificamos productos y luego sugerimos proceso
-        return """
+        """Manejar solicitudes de compra y crear ticket de compra"""
+        try:
+            import re
+            
+            # Extraer información de la compra
+            # Buscar productos mencionados
+            productos_match = re.search(r'(?:productos?|comprar|quiero|necesito)\s*(?:son|es)?\s*[:]?\s*([^.]+)', question, re.IGNORECASE)
+            productos_text = productos_match.group(1).strip() if productos_match else "Productos varios"
+            
+            # Si hay comas o "y", son múltiples productos
+            if ',' in productos_text or ' y ' in productos_text:
+                productos = productos_text
+            else:
+                # Buscar más patrones de productos
+                productos_list = re.findall(r'(\w+(?:\s+\w+)*)', productos_text)
+                productos = ', '.join(productos_list[:5]) if productos_list else productos_text  # Máximo 5 productos
+            
+            # Extraer total de la compra
+            total_match = re.search(r'(?:total|precio|costo|suma)\s*(?:es|de|:)?\s*\$?\s*(\d+(?:\.\d+)?)', question, re.IGNORECASE)
+            total = float(total_match.group(1)) if total_match else None
+            
+            # Si no hay total, intentar sumar números mencionados
+            if total is None:
+                numeros = re.findall(r'\$?\s*(\d+(?:\.\d+)?)', question)
+                if numeros:
+                    # Asumir que el número más grande es el total
+                    try:
+                        total = max([float(n) for n in numeros])
+                    except:
+                        total = None
+            
+            # Validar información mínima requerida
+            if not cliente_info.get('email'):
+                return """
+🛒 **Solicitud de Compra**
+
+Para crear un ticket de compra, necesito:
+- Tu correo electrónico
+- Los productos que deseas comprar
+- El total de la compra (opcional)
+
+Por favor, proporciona esta información para procesar tu solicitud.
+"""
+            
+            # Crear ticket de compra
+            result = crear_ticket_compra(
+                cliente_email=cliente_info.get('email'),
+                cliente_nombre=cliente_info.get('nombre') or "Cliente",
+                productos=productos[:200],  # Limitar longitud
+                total=total or 0.0,
+                cliente_telefono=cliente_info.get('telefono'),
+                notas=f"Solicitud de compra: {question[:200]}"
+            )
+            
+            if result.get('exito'):
+                return result.get('mensaje', 'Ticket de compra creado exitosamente')
+            else:
+                return f"Hubo un problema al crear el ticket: {result.get('mensaje', 'Error desconocido')}"
+                
+        except Exception as e:
+            tracer.log(
+                operation="COMPRA_TICKET_ERROR",
+                message=f"Error creando ticket de compra: {str(e)}",
+                level="ERROR"
+            )
+            return """
 🛒 **Proceso de Compra**
 
-Para realizar una compra, por favor:
-1. Identifique los productos que desea comprar
-2. Proporcione su información de contacto (email, teléfono, nombre)
-3. Un representante de ventas se comunicará con usted
+Lo siento, necesito más información para crear tu ticket de compra:
 
-Si necesita información sobre productos, pregúnteme por ellos.
+**Información requerida:**
+- Tu correo electrónico
+- Nombre de los productos que deseas comprar
+- Total de la compra (opcional)
+
+**Ejemplo:**
+"Quiero comprar botellas de acero y bolsas reutilizables, mi correo es cliente@ejemplo.com, total $50000"
+
+Si necesitas información sobre productos disponibles, pregúntame por ellos.
 """
     
     def _handle_queja_ticket(self, question: str, cliente_info: dict, query_info: dict) -> str:
@@ -786,7 +909,7 @@ Si necesita información sobre productos, pregúnteme por ellos.
             import re
             
             question_lower = question.lower()
-            cliente_info = extraer_info_cliente(question)
+            cliente_info = self._get_cliente_info(question, trace_id)
             
             # Buscar número de ticket en la consulta
             ticket_match = re.search(r'ticket\s*(?:número|numero|#)?\s*[:]?\s*([A-Z0-9\-]+)', question, re.IGNORECASE)
@@ -874,6 +997,45 @@ Se encontraron {total} ticket(s):
                 trace_id=trace_id
             )
             return "Lo siento, hubo un error al consultar los tickets."
+    
+    def _get_cliente_info(self, question: str, trace_id: str = None) -> dict:
+        """
+        Obtener información del cliente combinando extracción de texto y memoria de chat
+        
+        Args:
+            question: Consulta del usuario
+            trace_id: ID del trace (opcional)
+            
+        Returns:
+            dict: Información del cliente (email, nombre, telefono)
+        """
+        # Primero extraer del texto
+        cliente_info = extraer_info_cliente(question)
+        
+        # Intentar recuperar de memoria de chat si está disponible
+        try:
+            from tools.chat_memory import retrieve_chat_memory
+            # Usar un session_id por defecto basado en trace_id o generar uno
+            session_id = f"session_{trace_id[:8]}" if trace_id else "default_session"
+            
+            # Intentar recuperar información almacenada previamente
+            memory_result = retrieve_chat_memory(session_id, memory_key=None, trace_id=trace_id)
+            
+            if memory_result.get("found") and memory_result.get("data"):
+                memory_data = memory_result.get("data", {})
+                
+                # Completar campos faltantes con información de memoria
+                if not cliente_info.get('email') and memory_data.get('email'):
+                    cliente_info['email'] = memory_data.get('email')
+                if not cliente_info.get('nombre') and memory_data.get('nombre'):
+                    cliente_info['nombre'] = memory_data.get('nombre')
+                if not cliente_info.get('telefono') and memory_data.get('telefono'):
+                    cliente_info['telefono'] = memory_data.get('telefono')
+        except Exception as e:
+            # Si falla la recuperación de memoria, usar solo la extracción de texto
+            pass
+        
+        return cliente_info
     
     def _get_ticket_help_response(self) -> str:
         """Respuesta de ayuda para tickets"""

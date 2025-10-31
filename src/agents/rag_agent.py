@@ -586,7 +586,7 @@ No hay productos disponibles en nuestro inventario actual.
         return is_ticket_category
     
     @traceable(name="RAGAgent._handle_ticket_query")
-    def _handle_ticket_query(self, question: str, query_info: dict, enable_logging: bool, trace_id: str = None) -> str:
+    def _handle_ticket_query(self, question: str, query_info: dict, enable_logging: bool, trace_id: str = None, session_info: dict = None) -> str:
         """Manejar consultas que requieren crear o consultar tickets"""
         import re
         
@@ -630,8 +630,8 @@ No hay productos disponibles en nuestro inventario actual.
                     return self._handle_consulta_ticket(question, query_info)
             
             # Si llegamos aquí, es creación de ticket
-            # Extraer información del cliente (de la consulta y de memoria si existe)
-            cliente_info = self._get_cliente_info(question, trace_id)
+            # Extraer información del cliente (de la consulta, memoria y session_info si existe)
+            cliente_info = self._get_cliente_info(question, trace_id, session_info=session_info)
             
             # Detectar tipo de ticket
             if any(word in question_lower for word in ["devolver", "devolución", "retornar"]):
@@ -643,7 +643,7 @@ No hay productos disponibles en nuestro inventario actual.
             elif any(word in question_lower for word in ["factura", "recibo"]):
                 return self._handle_factura_query(question, cliente_info, query_info)
             
-            elif any(word in question_lower for word in ["comprar", "pedir", "ordenar", "quiero"]):
+            elif any(word in question_lower for word in ["comprar", "pedir", "ordenar", "quiero", "radicar", "ticket"]):
                 return self._handle_compra_ticket(question, cliente_info, query_info)
             
             elif any(word in question_lower for word in ["reclamo", "queja", "felicitación"]):
@@ -665,44 +665,108 @@ No hay productos disponibles en nuestro inventario actual.
     def _handle_devolucion_ticket(self, question: str, cliente_info: dict, query_info: dict) -> str:
         """Manejar solicitudes de devolución"""
         try:
-            # Extraer información del producto y factura
             import re
+            from datetime import datetime
             
-            # Buscar número de factura
+            # Validar que tenemos email (debe venir de session_info si está autenticado)
+            if not cliente_info.get('email'):
+                return """
+🔄 **Solicitud de Devolución**
+
+Para crear un ticket de devolución, necesito:
+- El producto que deseas devolver
+- El motivo de la devolución (opcional)
+
+Por favor, proporciona esta información para procesar tu solicitud.
+"""
+            
+            # Buscar número de factura en la consulta
             factura_match = re.search(r'factura\s*[:#]?\s*(\w+)', question, re.IGNORECASE)
             factura_numero = factura_match.group(1) if factura_match else None
             
-            # Buscar producto
-            producto_match = re.search(r'producto\s*(?:es)?\s*[:]?\s*([\w\s]+)', question, re.IGNORECASE)
-            producto_id = producto_match.group(1).strip() if producto_match else "No especificado"
+            # Si no se proporciona factura, generar automáticamente
+            if not factura_numero:
+                timestamp = datetime.now()
+                factura_numero = f"F-{timestamp.strftime('%Y%m%d')}-{timestamp.strftime('%H%M%S')}-{timestamp.microsecond % 10000:04d}"
+            
+            # Buscar producto - mejorar extracción
+            producto_patterns = [
+                r'producto\s*(?:es|:)?\s*([\w\s]+?)(?:\.|,|$)',
+                r'devolver\s+([\w\s]+?)(?:\.|,|con|de|$)',
+                r'([A-ZÁÉÍÓÚÑ][\w\s]+?)(?:defectuoso|roto|dañado)',
+            ]
+            
+            producto_id = "Producto no especificado"
+            for pattern in producto_patterns:
+                match = re.search(pattern, question, re.IGNORECASE)
+                if match:
+                    producto_id = match.group(1).strip()
+                    break
+            
+            # Si no se encontró producto específico, usar contexto de memoria
+            if producto_id == "Producto no especificado":
+                from tools.chat_memory import retrieve_chat_memory
+                session_id = "default_session"
+                memory_result = retrieve_chat_memory(session_id, "mentioned_products")
+                if memory_result.get("found") and memory_result.get("memory_value"):
+                    producto_id = memory_result.get("memory_value").split(",")[0].strip()
+            
+            # Extraer cantidad
+            cantidad_match = re.search(r'(\d+)\s*(?:unidades?|productos?)', question, re.IGNORECASE)
+            cantidad = int(cantidad_match.group(1)) if cantidad_match else 1
             
             # Motivo básico
             motivo = "Solicitud de devolución"
-            if "defectuoso" in question or "roto" in question or "dañado" in question:
+            if "defectuoso" in question.lower() or "roto" in question.lower() or "dañado" in question.lower():
                 motivo = "Producto defectuoso o dañado"
-            elif "talla" in question or "tamaño" in question:
+            elif "talla" in question.lower() or "tamaño" in question.lower():
                 motivo = "Problema de talla o tamaño"
-            elif "no me gustó" in question or "no me gusta" in question:
+            elif "no me gustó" in question.lower() or "no me gusta" in question.lower():
                 motivo = "No quedó conforme con el producto"
             
-            # Intentar crear ticket
-            result = crear_ticket_devolucion(
-                cliente_email=cliente_info.get('email') or "cliente@ejemplo.com",
+            # Crear ticket directamente usando create_ticket
+            from models.db import create_ticket
+            ticket_result = create_ticket(
+                tipo="devolucion",
+                titulo=f"Devolución de producto: {producto_id}",
+                descripcion=f"Cliente solicita devolución de {cantidad} unidad(es) de {producto_id}. Motivo: {motivo}",
+                cliente_email=cliente_info.get('email'),
                 cliente_nombre=cliente_info.get('nombre') or "Cliente",
+                cliente_telefono=cliente_info.get('telefono'),
                 producto_id=producto_id,
                 factura_numero=factura_numero,
+                cantidad=cantidad,
+                estado="pendiente",
+                prioridad="alta",
+                fecha_devolucion=datetime.now().strftime("%Y-%m-%d"),
                 motivo_devolucion=motivo,
-                cliente_telefono=cliente_info.get('telefono'),
-                notas=f"Consulta: {question}"
+                notas=f"Consulta: {question[:200]}"
             )
             
-            if result.get('exito'):
-                return result.get('mensaje', 'Ticket creado exitosamente')
+            if ticket_result and ticket_result.get('ticket_number'):
+                return f"""
+✅ **Ticket de devolución creado exitosamente**
+
+📋 **Detalles del ticket:**
+- **Número de ticket**: {ticket_result['ticket_number']}
+- **Número de factura**: {factura_numero}
+- **Producto**: {producto_id}
+- **Cantidad**: {cantidad} unidad(es)
+- **Motivo**: {motivo}
+- **Estado**: Pendiente
+
+Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto.
+"""
             else:
-                return f"Hubo un problema: {result.get('mensaje')}"
+                return "Hubo un problema al crear el ticket. Por favor, intenta nuevamente."
                 
         except Exception as e:
-            return "Lo siento, necesito más información. Por favor, proporcione: su email, número de factura y producto a devolver."
+            tracer.log(
+                operation="DEVOLUCION_TICKET_ERROR",
+                message=f"Error creando ticket de devolución: {str(e)}",
+                level="ERROR"
+            )
+            return "Hubo un error al crear el ticket de devolución. Por favor, intenta nuevamente."
     
     def _handle_seguimiento_query(self, question: str, cliente_info: dict, query_info: dict) -> str:
         """Manejar consultas de seguimiento y creación de guías de seguimiento"""
@@ -719,13 +783,12 @@ No hay productos disponibles en nuestro inventario actual.
             
             if is_creating:
                 # Crear nueva guía de seguimiento
-                # Validar que se tenga email del cliente
+                # Validar que tenemos email (debe venir de session_info si está autenticado)
                 if not cliente_info.get('email'):
                     return """
 📦 **Crear Guía de Seguimiento**
 
 Para crear una guía de seguimiento, necesito:
-- Tu correo electrónico
 - Número de pedido (opcional)
 - Empresa de envío (opcional)
 
@@ -799,61 +862,107 @@ Por favor, proporciona esta información para procesar tu solicitud.
         """Manejar solicitudes de compra y crear ticket de compra"""
         try:
             import re
+            from datetime import datetime
+            from models.db import generate_ticket_number
             
             # Extraer información de la compra
-            # Buscar productos mencionados
-            productos_match = re.search(r'(?:productos?|comprar|quiero|necesito)\s*(?:son|es)?\s*[:]?\s*([^.]+)', question, re.IGNORECASE)
-            productos_text = productos_match.group(1).strip() if productos_match else "Productos varios"
+            # Buscar productos mencionados - mejorar extracción
+            # Buscar patrones como "2 cargadores solares", "orden de compra de X", "comprar X"
+            productos_patterns = [
+                r'(?:orden de compra de|comprar|quiero|necesito)\s+(\d+)?\s*([^,\n]+?)(?:\s+con|$|\.)',
+                r'(\d+)\s+(cargadores?|productos?|unidades?)\s+(solares?|[^,\n]+)',
+                r'(cargador solar|cargadores solares|productos?[^,\n]+)',
+            ]
             
-            # Si hay comas o "y", son múltiples productos
-            if ',' in productos_text or ' y ' in productos_text:
-                productos = productos_text
-            else:
-                # Buscar más patrones de productos
-                productos_list = re.findall(r'(\w+(?:\s+\w+)*)', productos_text)
-                productos = ', '.join(productos_list[:5]) if productos_list else productos_text  # Máximo 5 productos
+            productos_text = "Productos varios"
+            for pattern in productos_patterns:
+                match = re.search(pattern, question, re.IGNORECASE)
+                if match:
+                    productos_text = match.group(0).strip()
+                    break
+            
+            # Si no se encontró con patrones, buscar productos mencionados de forma más general
+            if productos_text == "Productos varios":
+                productos_match = re.search(r'(?:productos?|comprar|quiero|necesito|orden de compra)\s*(?:son|es|de)?\s*[:]?\s*([^.\n]+)', question, re.IGNORECASE)
+                if productos_match:
+                    productos_text = productos_match.group(1).strip()
+            
+            # Limpiar y normalizar
+            productos_text = productos_text.replace('orden de compra de', '').replace('comprar', '').strip()
+            if not productos_text or productos_text.lower() in ['productos varios', 'varios', '']:
+                productos_text = "Productos solicitados por el cliente"
+            
+            # Extraer cantidad si está mencionada
+            cantidad_match = re.search(r'(\d+)\s*(?:unidades?|productos?|cargadores?)', question, re.IGNORECASE)
+            cantidad = int(cantidad_match.group(1)) if cantidad_match else 1
             
             # Extraer total de la compra
             total_match = re.search(r'(?:total|precio|costo|suma)\s*(?:es|de|:)?\s*\$?\s*(\d+(?:\.\d+)?)', question, re.IGNORECASE)
             total = float(total_match.group(1)) if total_match else None
             
-            # Si no hay total, intentar sumar números mencionados
+            # Si no hay total, intentar calcular o usar 0
             if total is None:
                 numeros = re.findall(r'\$?\s*(\d+(?:\.\d+)?)', question)
                 if numeros:
-                    # Asumir que el número más grande es el total
                     try:
-                        total = max([float(n) for n in numeros])
+                        # Intentar sumar todos los números o tomar el más grande
+                        total = sum([float(n) for n in numeros]) if len(numeros) == 1 else max([float(n) for n in numeros])
                     except:
-                        total = None
+                        total = 0.0
+                else:
+                    total = 0.0
             
-            # Validar información mínima requerida
+            # Validar que tenemos email (debe venir de session_info si está autenticado)
             if not cliente_info.get('email'):
                 return """
 🛒 **Solicitud de Compra**
 
 Para crear un ticket de compra, necesito:
-- Tu correo electrónico
 - Los productos que deseas comprar
 - El total de la compra (opcional)
 
 Por favor, proporciona esta información para procesar tu solicitud.
 """
             
-            # Crear ticket de compra
-            result = crear_ticket_compra(
+            # Generar número de factura automáticamente si no se proporciona
+            # Formato: F-YYYYMMDD-HHMMSS-XXXX (descripción leve + timestamp)
+            from datetime import datetime
+            timestamp = datetime.now()
+            factura_numero = f"F-{timestamp.strftime('%Y%m%d')}-{timestamp.strftime('%H%M%S')}-{timestamp.microsecond % 10000:04d}"
+            
+            # Crear ticket de compra usando crear_ticket directamente con factura_numero
+            from models.db import create_ticket
+            ticket_result = create_ticket(
+                tipo="compra",
+                titulo=f"Compra de {productos_text[:50]}",
+                descripcion=f"Cliente solicita compra de {cantidad} unidad(es): {productos_text}. Total: ${total:.2f}",
                 cliente_email=cliente_info.get('email'),
                 cliente_nombre=cliente_info.get('nombre') or "Cliente",
-                productos=productos[:200],  # Limitar longitud
-                total=total or 0.0,
                 cliente_telefono=cliente_info.get('telefono'),
+                total=total,
+                factura_numero=factura_numero,
+                cantidad=cantidad,
+                estado="procesando",
+                prioridad="normal",
                 notas=f"Solicitud de compra: {question[:200]}"
             )
             
-            if result.get('exito'):
-                return result.get('mensaje', 'Ticket de compra creado exitosamente')
+            if ticket_result and ticket_result.get('ticket_number'):
+                return f"""
+✅ **Ticket de compra creado exitosamente**
+
+📋 **Detalles del ticket:**
+- **Número de ticket**: {ticket_result['ticket_number']}
+- **Número de factura**: {factura_numero}
+- **Productos**: {productos_text}
+- **Cantidad**: {cantidad} unidad(es)
+- **Total**: ${total:.2f}
+- **Estado**: Procesando
+
+Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto para completar tu compra.
+"""
             else:
-                return f"Hubo un problema al crear el ticket: {result.get('mensaje', 'Error desconocido')}"
+                return "Hubo un problema al crear el ticket. Por favor, intenta nuevamente."
                 
         except Exception as e:
             tracer.log(
@@ -882,6 +991,17 @@ Si necesitas información sobre productos disponibles, pregúntame por ellos.
         try:
             question_lower = question.lower()
             
+            # Validar que tenemos email (debe venir de session_info si está autenticado)
+            if not cliente_info.get('email'):
+                return """
+📝 **Queja, Reclamo o Felicitación**
+
+Para crear un ticket, necesito:
+- Los detalles de tu caso
+
+Por favor, proporciona los detalles para procesar tu solicitud.
+"""
+            
             if "queja" in question_lower or "reclamo" in question_lower:
                 tipo = "reclamo"
             elif "felicitación" in question_lower or "felicitacion" in question_lower or "me gustó" in question_lower:
@@ -889,27 +1009,50 @@ Si necesitas información sobre productos disponibles, pregúntame por ellos.
             else:
                 tipo = "queja"
             
-            result = crear_ticket_queja_reclamo(
-                cliente_email=cliente_info.get('email') or "cliente@ejemplo.com",
-                cliente_nombre=cliente_info.get('nombre') or "Cliente",
-                tipo_queja=tipo,
+            # Crear ticket directamente usando create_ticket
+            from models.db import create_ticket
+            ticket_result = create_ticket(
+                tipo=tipo,
+                titulo=f"{tipo.capitalize()}: {question[:50]}",
                 descripcion=question,
-                cliente_telefono=cliente_info.get('telefono')
+                cliente_email=cliente_info.get('email'),
+                cliente_nombre=cliente_info.get('nombre') or "Cliente",
+                cliente_telefono=cliente_info.get('telefono'),
+                estado="abierto",
+                prioridad="normal",
+                notas=f"Ticket de {tipo} creado automáticamente"
             )
             
-            return result.get('mensaje', 'Ticket creado exitosamente')
+            if ticket_result and ticket_result.get('ticket_number'):
+                return f"""
+✅ **Ticket de {tipo} creado exitosamente**
+
+📋 **Detalles del ticket:**
+- **Número de ticket**: {ticket_result['ticket_number']}
+- **Tipo**: {tipo.capitalize()}
+- **Estado**: Abierto
+
+Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto.
+"""
+            else:
+                return "Hubo un problema al crear el ticket. Por favor, intenta nuevamente."
             
         except Exception as e:
-            return "Lo siento, necesito más información. Por favor, proporcione su email y detalles del caso."
+            tracer.log(
+                operation="QUEJA_TICKET_ERROR",
+                message=f"Error creando ticket de queja/reclamo: {str(e)}",
+                level="ERROR"
+            )
+            return "Hubo un error al crear el ticket. Por favor, intenta nuevamente."
     
     @traceable(name="RAGAgent._handle_consulta_ticket")
-    def _handle_consulta_ticket(self, question: str, query_info: dict, trace_id: str = None) -> str:
+    def _handle_consulta_ticket(self, question: str, query_info: dict, trace_id: str = None, session_info: dict = None) -> str:
         """Manejar consultas de tickets existentes"""
         try:
             import re
             
             question_lower = question.lower()
-            cliente_info = self._get_cliente_info(question, trace_id)
+            cliente_info = self._get_cliente_info(question, trace_id, session_info=session_info)
             
             # Buscar número de ticket en la consulta
             ticket_match = re.search(r'ticket\s*(?:número|numero|#)?\s*[:]?\s*([A-Z0-9\-]+)', question, re.IGNORECASE)
@@ -998,13 +1141,14 @@ Se encontraron {total} ticket(s):
             )
             return "Lo siento, hubo un error al consultar los tickets."
     
-    def _get_cliente_info(self, question: str, trace_id: str = None) -> dict:
+    def _get_cliente_info(self, question: str, trace_id: str = None, session_info: dict = None) -> dict:
         """
-        Obtener información del cliente combinando extracción de texto y memoria de chat
+        Obtener información del cliente combinando extracción de texto, memoria de chat y session_info
         
         Args:
             question: Consulta del usuario
             trace_id: ID del trace (opcional)
+            session_info: Información de sesión (email, name) si el usuario está autenticado
             
         Returns:
             dict: Información del cliente (email, nombre, telefono)
@@ -1012,7 +1156,14 @@ Se encontraron {total} ticket(s):
         # Primero extraer del texto
         cliente_info = extraer_info_cliente(question)
         
-        # Intentar recuperar de memoria de chat si está disponible
+        # PRIORIDAD 1: Si hay session_info (usuario autenticado), usar esa información primero
+        if session_info:
+            if session_info.get("email") and not cliente_info.get('email'):
+                cliente_info['email'] = session_info.get("email")
+            if session_info.get("name") and not cliente_info.get('nombre'):
+                cliente_info['nombre'] = session_info.get("name")
+        
+        # PRIORIDAD 2: Intentar recuperar de memoria de chat si está disponible
         try:
             from tools.chat_memory import retrieve_chat_memory
             # Usar un session_id por defecto basado en trace_id o generar uno
@@ -1024,15 +1175,17 @@ Se encontraron {total} ticket(s):
             if memory_result.get("found") and memory_result.get("data"):
                 memory_data = memory_result.get("data", {})
                 
-                # Completar campos faltantes con información de memoria
-                if not cliente_info.get('email') and memory_data.get('email'):
-                    cliente_info['email'] = memory_data.get('email')
-                if not cliente_info.get('nombre') and memory_data.get('nombre'):
-                    cliente_info['nombre'] = memory_data.get('nombre')
+                # Completar campos faltantes con información de memoria (solo si no están ya completos)
+                if not cliente_info.get('email'):
+                    # Intentar user_email (nuevo formato) o email (formato antiguo)
+                    cliente_info['email'] = memory_data.get('user_email') or memory_data.get('email')
+                if not cliente_info.get('nombre'):
+                    # Intentar user_name (nuevo formato) o nombre (formato antiguo)
+                    cliente_info['nombre'] = memory_data.get('user_name') or memory_data.get('nombre')
                 if not cliente_info.get('telefono') and memory_data.get('telefono'):
                     cliente_info['telefono'] = memory_data.get('telefono')
         except Exception as e:
-            # Si falla la recuperación de memoria, usar solo la extracción de texto
+            # Si falla la recuperación de memoria, usar solo la extracción de texto y session_info
             pass
         
         return cliente_info

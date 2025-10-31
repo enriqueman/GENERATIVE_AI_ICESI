@@ -25,8 +25,11 @@ HERRAMIENTAS DISPONIBLES:
 6. **OTP_SEND**: Enviar código OTP a un correo electrónico (para autenticación)
 7. **OTP_VERIFY**: Verificar código OTP enviado por el usuario (para completar autenticación)
 
-NOTA: El sistema tiene acceso automático a memoria de sesión (información previa del usuario).
-Si la consulta del usuario menciona el contexto previo o datos personales, úsalos para proporcionar respuestas personalizadas.
+NOTA CRÍTICA DE MEMORIA Y CONTEXTO:
+- El sistema tiene acceso automático a memoria de sesión (información previa del usuario, productos mencionados, intenciones anteriores).
+- SI la consulta del usuario es ambigua o parece referirse a algo mencionado anteriormente (ej: "dame 3 unidades", "ese producto", "lo de antes"), DEBES usar el contexto de la sesión para entender qué producto/intención se está mencionando.
+- Si hay productos mencionados previamente en "Contexto de la sesión", úsalos para interpretar consultas ambiguas.
+- Ejemplo: Si el contexto dice "mentioned_products: Cuaderno Reciclado" y el usuario dice "dame 3 unidades", se refiere a ese producto.
 
 REGLA IMPORTANTE DE AUTENTICACIÓN:
 - Si el usuario proporciona un correo electrónico (ej: "correo@ejemplo.com") SIN un código de 6 dígitos, SIEMPRE usa la herramienta OTP_SEND
@@ -43,80 +46,80 @@ INSTRUCCIONES:
 - Si necesitas información adicional, indícalo
 
 RESPONDE CON ESTE FORMATO JSON:
-{
+{{
     "intent": "descripción corta de la intención del usuario",
     "tools_needed": ["TOOL_NAME_1", "TOOL_NAME_2"],
     "reasoning": "explicación breve de por qué usar estas herramientas",
     "requires_additional_info": true/false,
     "missing_info": ["campo1", "campo2"] if requires_additional_info
-}
+}}
 
 EJEMPLOS:
 
 Usuario: "¿Tienen botellas de acero?"
-{
+{{
     "intent": "Buscar producto específico en inventario",
     "tools_needed": ["PRODUCT_SEARCH"],
     "reasoning": "El usuario pregunta por un producto específico, necesito buscar en inventario",
     "requires_additional_info": false
-}
+}}
 
 Usuario: "Quiero devolver un producto defectuoso"
-{
+{{
     "intent": "Crear ticket de devolución",
     "tools_needed": ["TICKET_CREATE"],
     "reasoning": "El usuario quiere iniciar un proceso de devolución",
     "requires_additional_info": true,
     "missing_info": ["email", "número de factura", "nombre producto"]
-}
+}}
 
 Usuario: "Consultar mi ticket TKT-12345"
-{
+{{
     "intent": "Consultar estado de ticket existente",
     "tools_needed": ["TICKET_QUERY"],
     "reasoning": "El usuario proporciona número de ticket, necesito consultarlo",
     "requires_additional_info": false
-}
+}}
 
 Usuario: "¿Cuál es la política de devoluciones?"
-{
+{{
     "intent": "Consultar política en documentos",
     "tools_needed": ["RAG_SEARCH"],
     "reasoning": "Pregunta sobre información documentada, usar RAG",
     "requires_additional_info": false
-}
+}}
 
 Usuario: "Mi correo es juan@ejemplo.com y mi nombre es Juan Pérez"
-{
+{{
     "intent": "Autenticarse en el sistema",
     "tools_needed": ["OTP_SEND"],
     "reasoning": "El usuario proporciona correo y nombre para autenticación, debo enviar código OTP",
     "requires_additional_info": false
-}
+}}
 
 Usuario: "Mi correo es maria@ejemplo.com"
-{
+{{
     "intent": "Autenticarse en el sistema",
     "tools_needed": ["OTP_SEND"],
     "reasoning": "El usuario proporciona correo electrónico para autenticación, debo enviar código OTP",
     "requires_additional_info": false
-}
+}}
 
 Usuario: "juan@ejemplo.com 123456"
-{
+{{
     "intent": "Verificar código OTP",
     "tools_needed": ["OTP_VERIFY"],
     "reasoning": "El usuario proporciona correo y código de 6 dígitos, debo verificar el OTP",
     "requires_additional_info": false
-}
+}}
 
 Usuario: "El código es 456789 y mi correo es juan@ejemplo.com"
-{
+{{
     "intent": "Verificar código OTP",
     "tools_needed": ["OTP_VERIFY"],
     "reasoning": "El usuario proporciona código OTP y correo, debo verificar el código",
     "requires_additional_info": false
-}
+}}
 
 Tu análisis:"""
 

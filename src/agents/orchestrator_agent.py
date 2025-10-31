@@ -72,7 +72,7 @@ class OrchestratorAgent:
         return self.rag_agent.is_ready()
     
     @traceable(name="OrchestratorAgent.analyze_query")
-    def analyze_query(self, query: str, trace_id: str = None, is_authenticated: bool = False) -> dict:
+    def analyze_query(self, query: str, trace_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> dict:
         """
         Analizar la consulta del usuario usando reasoning.
         
@@ -127,6 +127,9 @@ class OrchestratorAgent:
             # Agregar contexto de autenticación al prompt
             if is_authenticated:
                 auth_context = "\n\n⚠️ CONTEXTO CRÍTICO DE AUTENTICACIÓN:\nEl usuario YA ESTÁ AUTENTICADO en el sistema. NO debes activar herramientas OTP_SEND o OTP_VERIFY bajo ninguna circunstancia. Procesa la consulta como una solicitud normal del usuario autenticado (puede usar RAG_SEARCH, PRODUCT_SEARCH, TICKET_CREATE, TICKET_QUERY, etc.)."
+                # Si hay session_info con email, indicar que el email está disponible automáticamente
+                if session_info and session_info.get("email"):
+                    auth_context += f"\n\n✅ INFORMACIÓN DE SESIÓN DISPONIBLE:\nEl usuario autenticado tiene email disponible automáticamente: {session_info.get('email')}. Si la consulta requiere crear un ticket (TICKET_CREATE), NO marques 'requires_additional_info' por falta de email. El sistema usará automáticamente el email de la sesión. Solo marca 'requires_additional_info' si falta información crítica que no se puede inferir o generar automáticamente (como número de factura se puede generar automáticamente con fecha/timestamp)."
                 reasoning_prompt_template = reasoning_prompt_template + auth_context
             else:
                 auth_context = "\n\n⚠️ CONTEXTO CRÍTICO DE AUTENTICACIÓN:\nEl usuario NO está autenticado. Si proporciona email/código OTP en la consulta, debes activar herramientas de autenticación (OTP_SEND o OTP_VERIFY)."
@@ -215,7 +218,36 @@ class OrchestratorAgent:
                 }
         
         # Detección heurística para otras consultas
-        if "ticket" in query_lower:
+        # Verificar si hay contexto previo en la query (pasado por retrieve_memory)
+        has_context = "Contexto de la sesión" in query or "mentioned_products" in query or "last_intent" in query
+        
+        # Detectar solicitudes de cantidad/unidades que probablemente se refieren a un producto previo
+        quantity_patterns = [
+            r'\d+\s*(?:unidades?|packs?|piezas?|cantidad)',
+            r'(?:dame|quiero|necesito|por favor)\s+\d+\s*(?:unidades?|packs?|piezas?)',
+            r'(?:unidades?|packs?|piezas?)\s+(?:de|del)',
+        ]
+        is_quantity_request = any(re.search(pattern, query_lower) for pattern in quantity_patterns)
+        
+        if is_quantity_request and has_context:
+            # Si hay solicitud de cantidad Y hay contexto previo, probablemente es continuar con un producto/ticket previo
+            if "ticket" in query_lower or "tiket" in query_lower:
+                return {
+                    "intent": "Completar creación de ticket",
+                    "tools_needed": ["TICKET_CREATE"],
+                    "reasoning": "Usuario proporciona cantidad para completar ticket mencionado previamente",
+                    "requires_additional_info": False
+                }
+            else:
+                # Probablemente se refiere a un producto mencionado anteriormente
+                return {
+                    "intent": "Continuar con producto mencionado previamente",
+                    "tools_needed": ["PRODUCT_SEARCH", "TICKET_CREATE"],
+                    "reasoning": "Usuario proporciona cantidad, probablemente para producto del contexto previo",
+                    "requires_additional_info": False
+                }
+        
+        if "ticket" in query_lower or "tiket" in query_lower:
             if "consultar" in query_lower or "ver" in query_lower or "TKT-" in query:
                 return {
                     "intent": "Consultar ticket existente",
@@ -249,7 +281,7 @@ class OrchestratorAgent:
             }
     
     @traceable(name="OrchestratorAgent.execute_tools")
-    def execute_tools(self, analysis: dict, query: str, trace_id: str = None) -> dict:
+    def execute_tools(self, analysis: dict, query: str, trace_id: str = None, session_info: dict = None) -> dict:
         """
         Ejecutar las herramientas necesarias según el análisis.
         
@@ -257,6 +289,7 @@ class OrchestratorAgent:
             analysis: Resultado del análisis de reasoning
             query: Consulta original del usuario
             trace_id: ID del trace para agrupar logs
+            session_info: Información de sesión (email, name) si el usuario está autenticado
             
         Returns:
             dict: Resultados de las herramientas
@@ -287,11 +320,11 @@ class OrchestratorAgent:
                     results["data"]["product_search"] = tool_result
                 
                 elif tool == "TICKET_CREATE":
-                    tool_result = self._execute_ticket_create(query, trace_id)
+                    tool_result = self._execute_ticket_create(query, trace_id, session_info=session_info)
                     results["data"]["ticket_create"] = tool_result
                 
                 elif tool == "TICKET_QUERY":
-                    tool_result = self._execute_ticket_query(query, trace_id)
+                    tool_result = self._execute_ticket_query(query, trace_id, session_info=session_info)
                     results["data"]["ticket_query"] = tool_result
                 
                 elif tool == "OTP_SEND":
@@ -336,26 +369,57 @@ class OrchestratorAgent:
     
     def _execute_product_search(self, query: str, trace_id: str = None) -> dict:
         """Ejecutar búsqueda de productos usando el RAG Agent"""
-        query_info = self.rag_agent.query_processor.classify_query(query)
-        response = self.rag_agent._handle_product_query(query, query_info, enable_logging=False, trace_id=trace_id)
+        import re
+        # Si la query es ambigua (solo cantidad) pero hay contexto, usar producto del contexto
+        query_to_use = query
+        from tools.chat_memory import retrieve_chat_memory
+        session_id = "default_session"
+        
+        # Si parece ser una solicitud de cantidad sin producto específico, buscar en contexto
+        quantity_only = bool(re.search(r'\d+\s*(?:unidades?|packs?|piezas?)', query.lower())) and not any(word in query.lower() for word in ['producto', 'cuaderno', 'bolsa', 'vela', 'pajilla', 'cubierto'])
+        
+        if quantity_only:
+            memory_result = retrieve_chat_memory(session_id, "mentioned_products", trace_id=trace_id)
+            if memory_result.get("found") and memory_result.get("memory_value"):
+                product_name = memory_result.get("memory_value").split(",")[0].strip()  # Tomar el primer producto
+                query_to_use = f"{product_name} {query}"  # Combinar producto del contexto con la query
+        
+        query_info = self.rag_agent.query_processor.classify_query(query_to_use)
+        response = self.rag_agent._handle_product_query(query_to_use, query_info, enable_logging=False, trace_id=trace_id)
         return {
             "result": response,
             "method": "Product search in inventory"
         }
     
-    def _execute_ticket_create(self, query: str, trace_id: str = None) -> dict:
+    def _execute_ticket_create(self, query: str, trace_id: str = None, session_info: dict = None) -> dict:
         """Ejecutar creación de ticket usando el RAG Agent"""
-        query_info = self.rag_agent.query_processor.classify_query(query)
-        response = self.rag_agent._handle_ticket_query(query, query_info, enable_logging=False, trace_id=trace_id)
+        import re
+        # Enriquecer query con contexto si es necesario
+        query_to_use = query
+        from tools.chat_memory import retrieve_chat_memory
+        session_id = "default_session"
+        
+        # Si parece ser una solicitud de cantidad para completar ticket, buscar producto en contexto
+        quantity_only = bool(re.search(r'\d+\s*(?:unidades?|packs?|piezas?)', query.lower())) and not any(word in query.lower() for word in ['producto', 'cuaderno', 'bolsa', 'vela', 'pajilla', 'cubierto'])
+        
+        if quantity_only:
+            memory_result = retrieve_chat_memory(session_id, "mentioned_products", trace_id=trace_id)
+            if memory_result.get("found") and memory_result.get("memory_value"):
+                product_name = memory_result.get("memory_value").split(",")[0].strip()
+                query_to_use = f"{query}. Producto: {product_name}"
+        
+        query_info = self.rag_agent.query_processor.classify_query(query_to_use)
+        # Pasar session_info al RAG agent para uso automático de email
+        response = self.rag_agent._handle_ticket_query(query_to_use, query_info, enable_logging=False, trace_id=trace_id, session_info=session_info)
         return {
             "result": response,
             "method": "Ticket creation"
         }
     
-    def _execute_ticket_query(self, query: str, trace_id: str = None) -> dict:
+    def _execute_ticket_query(self, query: str, trace_id: str = None, session_info: dict = None) -> dict:
         """Ejecutar consulta de ticket usando el RAG Agent"""
         query_info = self.rag_agent.query_processor.classify_query(query)
-        response = self.rag_agent._handle_consulta_ticket(query, query_info, trace_id=trace_id)
+        response = self.rag_agent._handle_consulta_ticket(query, query_info, trace_id=trace_id, session_info=session_info)
         return {
             "result": response,
             "method": "Ticket query"
@@ -457,7 +521,7 @@ class OrchestratorAgent:
         }
     
     @traceable(name="OrchestratorAgent.store_user_info")
-    def store_user_info(self, session_id: str, query: str, trace_id: str = None) -> dict:
+    def store_user_info(self, session_id: str, query: str, trace_id: str = None, is_authenticated: bool = False) -> dict:
         """
         Extraer y almacenar información del usuario de la consulta
         
@@ -465,6 +529,7 @@ class OrchestratorAgent:
             session_id: ID de la sesión
             query: Consulta del usuario
             trace_id: ID del trace
+            is_authenticated: Si el usuario está autenticado (para no extraer email)
             
         Returns:
             dict: Información extraída
@@ -472,8 +537,8 @@ class OrchestratorAgent:
         try:
             from tools.chat_memory import extract_user_info as extract_info_helper
             
-            # Llamar a la función helper que internamente llama store_chat_memory con trace_id
-            info = extract_info_helper(query, session_id, trace_id=trace_id)
+            # Llamar a la función helper con is_authenticated para evitar extraer emails
+            info = extract_info_helper(query, session_id, trace_id=trace_id, is_authenticated=is_authenticated)
             
             tracer.log(
                 operation="USER_INFO_EXTRACTED",

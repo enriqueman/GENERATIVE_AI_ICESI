@@ -255,7 +255,7 @@ def clear_chat_memory(
 
 
 # Funciones helper para uso común
-def extract_user_info(query: str, session_id: str = None, trace_id: str = None) -> Dict[str, Any]:
+def extract_user_info(query: str, session_id: str = None, trace_id: str = None, is_authenticated: bool = False) -> Dict[str, Any]:
     """
     Extraer información del usuario de la consulta y almacenarla
     
@@ -263,6 +263,7 @@ def extract_user_info(query: str, session_id: str = None, trace_id: str = None) 
         query: Consulta del usuario
         session_id: ID de sesión (opcional)
         trace_id: ID del trace para agrupar logs
+        is_authenticated: Si el usuario está autenticado (para no extraer email)
         
     Returns:
         dict: Información extraída y almacenada
@@ -290,7 +291,12 @@ def extract_user_info(query: str, session_id: str = None, trace_id: str = None) 
     }
     
     # Extraer información
+    # CRÍTICO: Si el usuario está autenticado, NO extraer email (evitar activar autenticación)
     for key, pattern_list in patterns.items():
+        # Si está autenticado y es email, saltar
+        if is_authenticated and key == "email":
+            continue
+            
         for pattern in pattern_list:
             match = re.search(pattern, query, re.IGNORECASE)
             if match:

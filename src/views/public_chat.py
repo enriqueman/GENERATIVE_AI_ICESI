@@ -196,6 +196,29 @@ Una vez que me proporciones esta información, te enviaré un código de verific
         prompt = st.chat_input("Escribe tu pregunta aquí...")
         
         if prompt:
+            # Verificar nuevamente el estado de autenticación antes de procesar
+            # Esto previene problemas de sincronización con el estado de Streamlit
+            is_user_authenticated = False
+            if st.session_state.chat_session_token:
+                session_data = verify_chat_session(st.session_state.chat_session_token)
+                if session_data and session_data.get("authenticated"):
+                    is_user_authenticated = True
+                    # Actualizar estado por si acaso
+                    st.session_state.chat_authenticated = True
+                    st.session_state.chat_user_email = session_data.get("email")
+                    st.session_state.chat_user_name = session_data.get("name")
+                else:
+                    # Session expired or invalid - redirect to unauthenticated flow
+                    st.session_state.chat_authenticated = False
+                    st.session_state.chat_session_token = None
+                    st.rerun()
+                    return
+            
+            if not is_user_authenticated:
+                # Si por alguna razón no está autenticado, redirigir
+                st.rerun()
+                return
+            
             # Save user message
             create_message(CHAT_ID, "user", prompt)
             
@@ -206,8 +229,13 @@ Una vez que me proporciones esta información, te enviaré un código de verific
             try:
                 # Usar el agente inteligente (Intelligent Agent es el punto de entrada)
                 # Pasar is_authenticated=True porque el usuario ya está autenticado
+                # También pasar información de sesión (email, nombre) para uso automático
                 agent = get_intelligent_agent()
-                response = agent.process_query(prompt, enable_logging=False, is_authenticated=True)
+                session_info = {
+                    "email": st.session_state.chat_user_email,
+                    "name": st.session_state.chat_user_name
+                } if st.session_state.chat_user_email else None
+                response = agent.process_query(prompt, enable_logging=False, is_authenticated=True, session_info=session_info)
             except Exception as e:
                 response = """
                 😔 Lo siento, tuve un problema al procesar tu consulta.

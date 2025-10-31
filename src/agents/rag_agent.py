@@ -867,34 +867,68 @@ Por favor, proporciona esta información para procesar tu solicitud.
             
             # Extraer información de la compra
             # Buscar productos mencionados - mejorar extracción
-            # Buscar patrones como "2 cargadores solares", "orden de compra de X", "comprar X"
+            # Buscar patrones como "2 cargadores solares", "orden de compra de X", "comprar X", "panel solar"
             productos_patterns = [
-                r'(?:orden de compra de|comprar|quiero|necesito)\s+(\d+)?\s*([^,\n]+?)(?:\s+con|$|\.)',
-                r'(\d+)\s+(cargadores?|productos?|unidades?)\s+(solares?|[^,\n]+)',
-                r'(cargador solar|cargadores solares|productos?[^,\n]+)',
+                r'(\d+)\s+(cargadores?|paneles?|productos?|unidades?)\s+(solares?|[^,\n]+)',
+                r'(?:orden de compra de|comprar|quiero|necesito|ticket de compra de)\s+(\d+)?\s*([^,\n\.]+?)(?:\s+[aà]|$|\.|,)',
+                r'(?:para|de)\s+([a-záéíóúñ\s]+?)(?:[,\n]|$|\.)',
+                r'(cargador solar|cargadores solares|panel solar|paneles solares|[a-záéíóúñ\s]+(?:solar|solares))',
             ]
             
-            productos_text = "Productos varios"
+            productos_text = None
             for pattern in productos_patterns:
                 match = re.search(pattern, question, re.IGNORECASE)
                 if match:
-                    productos_text = match.group(0).strip()
+                    # Extraer el grupo más relevante
+                    if len(match.groups()) > 1:
+                        productos_text = ' '.join([g for g in match.groups() if g]).strip()
+                    else:
+                        productos_text = match.group(0).strip()
                     break
             
             # Si no se encontró con patrones, buscar productos mencionados de forma más general
-            if productos_text == "Productos varios":
-                productos_match = re.search(r'(?:productos?|comprar|quiero|necesito|orden de compra)\s*(?:son|es|de)?\s*[:]?\s*([^.\n]+)', question, re.IGNORECASE)
+            if not productos_text:
+                productos_match = re.search(r'(?:ticket de compra para|comprar|quiero|necesito|orden de compra)\s*(?:son|es|de)?\s*[:]?\s*([^.\n,]+)', question, re.IGNORECASE)
                 if productos_match:
                     productos_text = productos_match.group(1).strip()
             
-            # Limpiar y normalizar
-            productos_text = productos_text.replace('orden de compra de', '').replace('comprar', '').strip()
-            if not productos_text or productos_text.lower() in ['productos varios', 'varios', '']:
-                productos_text = "Productos solicitados por el cliente"
+            # Limpiar y normalizar productos_text
+            if productos_text:
+                productos_text = productos_text.replace('orden de compra de', '').replace('comprar', '').replace('ticket de compra para', '').replace('ticket de compra de', '').strip()
+                # Remover cantidad si está al inicio
+                productos_text = re.sub(r'^\d+\s+', '', productos_text).strip()
+            
+            if not productos_text or productos_text.lower() in ['varios', '']:
+                # Intentar usar contexto de memoria
+                from tools.chat_memory import retrieve_chat_memory
+                session_id = "default_session"
+                memory_result = retrieve_chat_memory(session_id, "mentioned_products", trace_id=trace_id)
+                if memory_result.get("found") and memory_result.get("memory_value"):
+                    productos_text = memory_result.get("memory_value").split(",")[0].strip()
+                else:
+                    productos_text = "Productos solicitados por el cliente"
             
             # Extraer cantidad si está mencionada
-            cantidad_match = re.search(r'(\d+)\s*(?:unidades?|productos?|cargadores?)', question, re.IGNORECASE)
+            cantidad_match = re.search(r'(\d+)\s*(?:unidades?|productos?|cargadores?|paneles?)', question, re.IGNORECASE)
             cantidad = int(cantidad_match.group(1)) if cantidad_match else 1
+            
+            # Extraer dirección de envío si está presente
+            direccion_envio = None
+            direction_patterns = [
+                r'direcci[oó]n\s*(?:de\s*(?:env[ií]o|entrega))?\s*[:]?\s*([^\.]+)',
+                r'(?:a la direccion|direccion|dirección|env[ií]o a|enviar a)\s*[:]?\s*([^\.]+)',
+                r'(?:a la direccion|direccion|dirección)\s+(\d+[^\.]+)',  # Captura "a la direccion 23 45 323 popayan"
+                r'((?:carrera|calle|avenida|av\.?|cra\.?|cl\.?)\s*\d+\s*[#]?\s*\d*\s*[a-z]?\s*[-\s]*[^\.]+)',  # Captura "carrera 23 # 12 w - popayan"
+            ]
+            for pattern in direction_patterns:
+                match = re.search(pattern, question, re.IGNORECASE)
+                if match:
+                    direccion_envio = match.group(1).strip() if match.lastindex >= 1 else match.group(0).strip()
+                    # Limpiar la dirección
+                    direccion_envio = direccion_envio.replace('a la direccion', '').replace('direccion', '').replace('dirección', '').strip()
+                    if direccion_envio.startswith(':'):
+                        direccion_envio = direccion_envio[1:].strip()
+                    break
             
             # Extraer total de la compra
             total_match = re.search(r'(?:total|precio|costo|suma)\s*(?:es|de|:)?\s*\$?\s*(\d+(?:\.\d+)?)', question, re.IGNORECASE)
@@ -930,12 +964,20 @@ Por favor, proporciona esta información para procesar tu solicitud.
             timestamp = datetime.now()
             factura_numero = f"F-{timestamp.strftime('%Y%m%d')}-{timestamp.strftime('%H%M%S')}-{timestamp.microsecond % 10000:04d}"
             
+            # Preparar descripción y notas con toda la información extraída
+            descripcion = f"Cliente solicita compra de {cantidad} unidad(es): {productos_text}. Total: ${total:.2f}"
+            notas_parts = [f"Solicitud de compra: {question[:150]}"]
+            if direccion_envio:
+                descripcion += f". Dirección de envío: {direccion_envio}"
+                notas_parts.append(f"Dirección: {direccion_envio}")
+            notas = ". ".join(notas_parts)
+            
             # Crear ticket de compra usando crear_ticket directamente con factura_numero
             from models.db import create_ticket
             ticket_result = create_ticket(
                 tipo="compra",
                 titulo=f"Compra de {productos_text[:50]}",
-                descripcion=f"Cliente solicita compra de {cantidad} unidad(es): {productos_text}. Total: ${total:.2f}",
+                descripcion=descripcion,
                 cliente_email=cliente_info.get('email'),
                 cliente_nombre=cliente_info.get('nombre') or "Cliente",
                 cliente_telefono=cliente_info.get('telefono'),
@@ -944,7 +986,7 @@ Por favor, proporciona esta información para procesar tu solicitud.
                 cantidad=cantidad,
                 estado="procesando",
                 prioridad="normal",
-                notas=f"Solicitud de compra: {question[:200]}"
+                notas=notas
             )
             
             if ticket_result and ticket_result.get('ticket_number'):

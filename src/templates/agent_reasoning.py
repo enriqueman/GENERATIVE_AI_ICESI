@@ -36,6 +36,14 @@ REGLA IMPORTANTE DE AUTENTICACIÓN:
 - Si el usuario proporciona un correo electrónico Y un código de 6 dígitos (ej: "correo@ejemplo.com 123456"), SIEMPRE usa la herramienta OTP_VERIFY
 - NO uses otras herramientas (RAG_SEARCH, PRODUCT_SEARCH, etc.) cuando el usuario está proporcionando información de autenticación
 
+REGLA CRÍTICA PARA CREACIÓN DE TICKETS:
+- Si el usuario está AUTENTICADO (el sistema te indicará esto), el email y nombre están disponibles automáticamente. NO los solicites.
+- Números de factura, números de pedido y números de ticket se generan AUTOMÁTICAMENTE por el sistema. NUNCA los solicites.
+- Si el usuario menciona cantidad (ej: "5 cargadores solares"), producto (ej: "panel solar"), o dirección en la consulta, esa información está disponible. NO la solicites de nuevo.
+- Solo marca 'requires_additional_info: true' si falta información REALMENTE crítica que NO se puede inferir de la consulta ni generar automáticamente.
+- Ejemplos de información que NO debes solicitar: email (si está autenticado), número de factura/pedido (se genera automáticamente), cantidad si está en la consulta, dirección si está en la consulta.
+- Ejemplos de información que SÍ puedes solicitar (si es realmente necesaria y no está presente): detalles específicos del producto si es crítico y no está claro en la consulta.
+
 CONSULTA DEL USUARIO:
 {user_query}
 
@@ -43,7 +51,7 @@ INSTRUCCIONES:
 - Analiza la consulta cuidadosamente
 - Determina la intención del usuario
 - Decide qué herramienta(s) necesitas usar
-- Si necesitas información adicional, indícalo
+- Si necesitas información adicional, indícalo SOLO si es realmente crítica y no se puede inferir/generar automáticamente
 
 RESPONDE CON ESTE FORMATO JSON:
 {{

@@ -157,6 +157,31 @@ class IntelligentAgent:
             if not query_to_analyze:
                 query_to_analyze = query
         
+        # CRÍTICO: Verificar si el usuario está completando información de una solicitud previa
+        # Si la última intención era crear un ticket y la consulta actual solo proporciona información,
+        # debe interpretarse como completar la solicitud anterior
+        import re
+        from tools.chat_memory import retrieve_chat_memory
+        last_intent_memory = retrieve_chat_memory(session_id, "last_intent", trace_id=trace_id)
+        is_completing_previous_request = False
+        
+        if last_intent_memory.get("found"):
+            last_intent = last_intent_memory.get("memory_value", "").lower()
+            # Si la última intención era crear un ticket y la consulta actual no menciona "crear" ni "ticket"
+            # pero proporciona información (dirección, cantidad, etc.), probablemente está completando
+            if any(word in last_intent for word in ["crear ticket", "ticket de compra", "ticket de"]) and \
+               "crear" not in query_to_analyze.lower() and "ticket" not in query_to_analyze.lower():
+                # Verificar si la consulta proporciona información (dirección, cantidad, etc.)
+                info_patterns = [
+                    r'direcci[oó]n|direccion',
+                    r'\d+\s*(?:unidades?|productos?|cargadores?|paneles?)',
+                    r'(?:carrera|calle|avenida)',
+                ]
+                if any(re.search(pattern, query_to_analyze.lower()) for pattern in info_patterns):
+                    is_completing_previous_request = True
+                    # Forzar que la intención sea completar la creación del ticket
+                    query_to_analyze = f"{query_to_analyze} [completar ticket de compra anterior]"
+        
         # Enriquecer query con contexto de memoria si existe
         enriched_query = query_to_analyze
         if memory_context:
@@ -166,6 +191,13 @@ class IntelligentAgent:
         # Pasar is_authenticated y session_info para que use email disponible automáticamente
         analysis = self.orchestrator.analyze_query(enriched_query, trace_id, is_authenticated, session_info=session_info)
         
+        # Si está completando una solicitud previa, forzar que sea creación de ticket
+        if is_completing_previous_request and is_authenticated and session_info:
+            analysis["tools_needed"] = ["TICKET_CREATE"]
+            analysis["intent"] = "Completar ticket de compra anterior"
+            analysis["requires_additional_info"] = False
+            analysis["missing_info"] = []
+        
         tracer.log(
             operation="ORCHESTRATOR_ANALYSIS",
             message=f"Consulta analizada: {analysis.get('intent')}",
@@ -174,22 +206,65 @@ class IntelligentAgent:
             trace_id=trace_id
         )
         
-        # CRÍTICO: Si el usuario está autenticado y quiere crear un ticket, verificar si tenemos email disponible
-        # Si tenemos email de session_info, NO pedir información adicional
+        # CRÍTICO: Si el usuario está autenticado y quiere crear un ticket, verificar información disponible
+        # NO pedir información adicional si podemos inferirla o generarla automáticamente
         if analysis.get("requires_additional_info", False) and is_authenticated and session_info:
             # Verificar si la intención es crear un ticket
             intent = analysis.get("intent", "").lower()
             tools_needed = analysis.get("tools_needed", [])
-            is_ticket_creation = "TICKET_CREATE" in tools_needed or any(word in intent for word in ["crear ticket", "ticket de compra", "ticket de devolución", "orden de compra"])
+            is_ticket_creation = "TICKET_CREATE" in tools_needed or any(word in intent for word in ["crear ticket", "ticket de compra", "ticket de devolución", "orden de compra", "ticket de"])
             
             if is_ticket_creation and session_info.get("email"):
-                # Tenemos email disponible, no necesitamos pedir información adicional
-                # Actualizar el análisis para no requerir email
+                import re
+                
+                # Analizar qué información está presente en la consulta
                 missing = analysis.get("missing_info", [])
+                
+                # Remover email de missing_info (está disponible en session_info)
                 if "email" in missing:
                     missing.remove("email")
-                if not missing or (len(missing) == 1 and missing[0] in ["número de factura", "numero de factura"]):
-                    # Solo falta número de factura o detalles, que podemos generar/extraer automáticamente
+                if "correo" in missing:
+                    missing.remove("correo")
+                
+                # Verificar si hay información en la consulta que cubra los missing_info
+                query_lower = query.lower()
+                
+                # Detectar cantidad
+                if any(word in missing for word in ["cantidad", "unidades", "productos"]):
+                    if re.search(r'\d+\s*(?:unidades?|productos?|cargadores?|paneles?|packs?)', query_lower):
+                        missing = [m for m in missing if m not in ["cantidad", "unidades", "productos"]]
+                
+                # Detectar dirección - patrones mejorados
+                if any(word in missing for word in ["dirección", "direccion", "dirección de envío", "direccion de envio", "dirección de entrega", "direccion completa"]):
+                    direction_patterns = [
+                        r'direcci[oó]n\s*(?:de\s*(?:env[ií]o|entrega))?\s*[:]?\s*([^\.]+)',
+                        r'(?:a la direccion|direccion|dirección)\s*[:]?\s*([^\.]+)',  # Captura "a la direccion 23 45 323 popayan"
+                        r'(?:carrera|calle|avenida|av\.?|cra\.?|cl\.?)\s*\d+',
+                        r'#?\s*\d+',
+                        r'popay[áa]n|bogot[áa]|medell[ií]n|cali|barranquilla|guayabal',
+                        r'\d+\s+\d+\s+\d+\s+[a-záéíóúñ]+',  # Captura "23 45 323 popayan"
+                    ]
+                    if any(re.search(pattern, query_lower) for pattern in direction_patterns):
+                        missing = [m for m in missing if m not in ["dirección", "direccion", "dirección de envío", "direccion de envio", "dirección de entrega", "direccion completa"]]
+                
+                # Detectar producto (si hay producto mencionado o en contexto)
+                if any(word in missing for word in ["producto", "productos", "artículo", "articulo"]):
+                    if re.search(r'(cargador|panel|producto|art[íi]culo)', query_lower):
+                        missing = [m for m in missing if m not in ["producto", "productos", "artículo", "articulo", "detalles del producto", "detalles adicionales del producto"]]
+                
+                # Información que el sistema puede generar automáticamente (NO debe estar en missing_info)
+                auto_generable = [
+                    "número de factura", "numero de factura", "número de pedido", "numero de pedido",
+                    "número de ticket", "numero de ticket", "ticket number", "order number"
+                ]
+                missing = [m for m in missing if not any(auto in m.lower() for auto in auto_generable)]
+                
+                # Si no quedan missing_info críticos o son opcionales, proceder a crear el ticket
+                optional_info = ["observaciones", "notas", "comentarios", "detalles adicionales"]
+                critical_missing = [m for m in missing if not any(opt in m.lower() for opt in optional_info)]
+                
+                if not critical_missing:
+                    # No hay información crítica faltante, proceder con la creación
                     analysis["requires_additional_info"] = False
                     analysis["missing_info"] = []
         

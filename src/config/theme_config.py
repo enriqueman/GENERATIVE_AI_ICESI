@@ -5,7 +5,7 @@ Configuración de temas para la aplicación EcoMarket
 # Definición de temas disponibles
 THEMES = {
     "default": {
-        "name": "🌿 EcoMarket (Verde)",
+        "name": "[ECOMARKET] EcoMarket (Verde)",
         "primary_color": "#2E7D32",
         "secondary_color": "#4CAF50", 
         "accent_color": "#E8F5E9",

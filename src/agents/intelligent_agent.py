@@ -1,433 +1,597 @@
 """
-Agente Inteligente de EcoMarket - Coordinador Principal
-Combina Orchestrator Agent (reasoning) y Response Agent (respuestas)
+Agente Inteligente Principal - Universidad ICESI
+Sistema de Recomendación de Posgrados
+
+Este agente coordina el flujo completo:
+1. INTERVIEWER Agent: Recopila información del candidato
+2. PROFILER Agent: Analiza el perfil y calcula matches
+3. RECOMMENDER Agent: Genera recomendaciones personalizadas
 """
 
 import os
 import sys
 import time
+from typing import Dict, Any, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.tracing import tracer
-from agents.orchestrator_agent import get_orchestrator
-from agents.response_agent import get_response_agent
+from agents.interviewer_agent import get_interviewer
+from agents.profiler_agent import get_profiler
+from agents.recommender_agent import get_recommender
+from tools.chat_memory import get_interview_data, check_interview_complete
 
-# Importar LangSmith para agrupar trazas
+# Importar LangSmith para trazas
 try:
     from langsmith import trace
-    from langchain_core.tracers import LangChainTracer
-    from langchain_core.globals import set_verbose
-    import os
     LANGSMITH_AVAILABLE = True
 except ImportError:
     LANGSMITH_AVAILABLE = False
     trace = None
-    LangChainTracer = None
-    os = None
 
 
 class IntelligentAgent:
     """
-    Agente inteligente principal que coordina:
-    - Orchestrator Agent: Analiza y decide qué herramientas usar
-    - Response Agent: Genera respuestas amigables
-    
-    Este agente actúa como coordinador de alto nivel.
+    Agente inteligente principal que coordina el sistema de recomendación de posgrados
+
+    Flujo:
+    1. Detecta si hay una entrevista en curso
+    2. Si no hay entrevista → inicia INTERVIEWER Agent
+    3. INTERVIEWER recopila información paso a paso
+    4. Cuando entrevista completa → PROFILER Agent analiza
+    5. PROFILER genera ranking → RECOMMENDER Agent genera recomendación
+    6. Usuario puede hacer preguntas adicionales sobre programas
     """
-    
+
     def __init__(self):
         """Inicializar el agente inteligente"""
-        # Usar los agentes especializados
-        self.orchestrator = get_orchestrator()
-        self.response_agent = get_response_agent()
-        self.active_sessions = {}  # Track active user sessions
-        print("✅ Intelligent Agent (Coordinador) inicializado")
-    
+        self.interviewer = get_interviewer()
+        self.profiler = get_profiler()
+        self.recommender = get_recommender()
+        self.active_sessions = {}
+        print("[OK] Intelligent Agent - Sistema de Recomendación inicializado")
+
     def is_ready(self):
         """Verificar si el agente está listo"""
-        return self.orchestrator.is_ready()
-    
-    def process_query(self, query: str, enable_logging: bool = False, session_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> str:
+        return self.interviewer is not None
+
+    def process_query(
+        self,
+        query: str,
+        enable_logging: bool = False,
+        session_id: str = None,
+        is_authenticated: bool = False,
+        session_info: dict = None
+    ) -> str:
         """
-        Procesar una consulta del usuario de manera inteligente.
-        
-        Flujo:
-        1. Generar trace_id único para toda la interacción
-        2. Gestionar memoria de sesión
-        3. Orchestrator analiza y decide qué hacer
-        4. Orchestrator ejecuta herramientas
-        5. Response Agent genera respuesta amigable
-        
+        Procesar una consulta del usuario.
+
+        Flujo inteligente:
+        - Si no hay entrevista activa → Inicia entrevista
+        - Si hay entrevista en curso → Procesa respuesta
+        - Si entrevista completa → Genera recomendación
+        - Si ya generó recomendación → Responde preguntas sobre programas
+
         Args:
-            query: Consulta del usuario
+            query: Consulta/respuesta del usuario
             enable_logging: Habilitar logging detallado
-            session_id: ID de sesión del usuario (opcional)
-            is_authenticated: Si el usuario está autenticado (opcional)
-            session_info: Información de sesión del usuario (email, name) si está autenticado
-            
+            session_id: ID de sesión del usuario
+            is_authenticated: Si el usuario está autenticado
+            session_info: Información de sesión (email, nombre)
+
         Returns:
-            str: Respuesta amigable del agente
+            str: Respuesta del agente
         """
         start_time = time.time()
-        
+
         # Generar o usar session_id
         if not session_id:
-            # Por ahora usamos un session_id simple basado en el usuario
-            # En producción esto vendría de la sesión del usuario
             session_id = "default_session"
-        
-        # Generar un trace_id único para toda esta interacción
+
+        # Generar trace_id para esta interacción
         trace_id = tracer.generate_trace_id()
-        
+
         try:
-            # Log inicial del trace completo
             tracer.log(
                 operation="USER_QUERY_START",
-                message=f"📥 Consulta recibida",
-                metadata={"query": query[:200]},
+                message=f"[CHAT] Consulta recibida",
+                metadata={"query": query[:200], "session_id": session_id},
                 level="INFO",
                 trace_id=trace_id
             )
-            
-            # Crear contexto de LangSmith para agrupar todas las trazas
-            # Este context manager envuelve TODA la ejecución
-            if LANGSMITH_AVAILABLE and trace:
-                # Configurar variables de entorno para que las trazas se agrupen
-                # IMPORTANTE: Configurar ANTES del context manager
-                project_name = os.getenv("LANGCHAIN_PROJECT", "ecomarket-agent")
-                os.environ["LANGCHAIN_PROJECT"] = project_name
-                
-                # Crear traza padre para agrupar todo
-                with trace(
-                    name=f"EcoMarketAgent.process_query",
-                    project_name=project_name,
-                    metadata={
-                        "query": query[:200],
-                        "trace_id": trace_id,
-                        "session_id": session_id
-                    }
-                ):
-                    # Ahora ejecutar todo el flujo dentro del contexto
-                    return self._process_query_flow(query, trace_id, start_time, session_id, is_authenticated, session_info)
-            else:
-                return self._process_query_flow(query, trace_id, start_time, session_id, is_authenticated, session_info)
-            
-        except Exception as e:
-            tracer.log(
-                operation="USER_QUERY_ERROR",
-                message=f"❌ Error procesando consulta: {str(e)}",
-                level="ERROR",
-                trace_id=trace_id
-            )
-            
-            # Respuesta de error amigable
-            return self.response_agent.get_error_response(str(e))
-    
-    def _process_query_flow(self, query: str, trace_id: str, start_time: float, session_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> str:
-        """Procesar el flujo completo de la consulta (con o sin LangSmith)"""
-        
-        # PASO 0: Gestionar memoria de sesión
-        # Pasar is_authenticated para que NO extraiga email si el usuario ya está autenticado
-        self.orchestrator.store_user_info(session_id, query, trace_id, is_authenticated)
-        
-        # Si hay session_info con email, guardarlo en memoria para uso automático
-        if session_info and session_info.get("email"):
-            from tools.chat_memory import store_chat_memory
-            store_chat_memory(session_id, "user_email", session_info.get("email"), ttl_minutes=60, trace_id=trace_id)
-            if session_info.get("name"):
-                store_chat_memory(session_id, "user_name", session_info.get("name"), ttl_minutes=60, trace_id=trace_id)
-        
-        # Recuperar memoria existente para enriquecer el contexto
-        # Pasar is_authenticated para que retrieve_memory filtre emails automáticamente
-        memory_context = self.orchestrator.retrieve_memory(session_id, trace_id, is_authenticated)
-        
-        # CRÍTICO: Si el usuario está autenticado, limpiar emails de la query antes de analizarla
-        # Esto previene que menciones casuales del email activen autenticación
-        query_to_analyze = query
-        if is_authenticated:
-            import re
-            # Remover emails de la query para análisis (pero mantener la query original para contexto)
-            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-            query_to_analyze = re.sub(email_pattern, '', query).strip()
-            # Limpiar espacios múltiples y líneas vacías
-            query_to_analyze = re.sub(r'\s+', ' ', query_to_analyze)
-            query_to_analyze = query_to_analyze.strip()
-            # Si después de limpiar queda vacío, usar la query original pero sin email
-            if not query_to_analyze:
-                query_to_analyze = query
-        
-        # CRÍTICO: Verificar si el usuario está completando información de una solicitud previa
-        # Si la última intención era crear un ticket y la consulta actual solo proporciona información,
-        # debe interpretarse como completar la solicitud anterior
-        import re
-        from tools.chat_memory import retrieve_chat_memory
-        last_intent_memory = retrieve_chat_memory(session_id, "last_intent", trace_id=trace_id)
-        is_completing_previous_request = False
-        
-        if last_intent_memory.get("found"):
-            last_intent = last_intent_memory.get("memory_value", "").lower()
-            # Si la última intención era crear un ticket y la consulta actual no menciona "crear" ni "ticket"
-            # pero proporciona información (dirección, cantidad, etc.), probablemente está completando
-            if any(word in last_intent for word in ["crear ticket", "ticket de compra", "ticket de"]) and \
-               "crear" not in query_to_analyze.lower() and "ticket" not in query_to_analyze.lower():
-                # Verificar si la consulta proporciona información (dirección, cantidad, etc.)
-                info_patterns = [
-                    r'direcci[oó]n|direccion',
-                    r'\d+\s*(?:unidades?|productos?|cargadores?|paneles?)',
-                    r'(?:carrera|calle|avenida)',
-                ]
-                if any(re.search(pattern, query_to_analyze.lower()) for pattern in info_patterns):
-                    is_completing_previous_request = True
-                    # Forzar que la intención sea completar la creación del ticket
-                    query_to_analyze = f"{query_to_analyze} [completar ticket de compra anterior]"
-        
-        # Enriquecer query con contexto de memoria si existe
-        enriched_query = query_to_analyze
-        if memory_context:
-            enriched_query = f"{query_to_analyze}\n\n{memory_context}"
-        
-        # PASO 1: Orchestrator analiza la consulta (enriquecida con memoria, sin emails si está autenticado)
-        # Pasar is_authenticated y session_info para que use email disponible automáticamente
-        analysis = self.orchestrator.analyze_query(enriched_query, trace_id, is_authenticated, session_info=session_info)
-        
-        # Si está completando una solicitud previa, forzar que sea creación de ticket
-        if is_completing_previous_request and is_authenticated and session_info:
-            analysis["tools_needed"] = ["TICKET_CREATE"]
-            analysis["intent"] = "Completar ticket de compra anterior"
-            analysis["requires_additional_info"] = False
-            analysis["missing_info"] = []
-        
-        tracer.log(
-            operation="ORCHESTRATOR_ANALYSIS",
-            message=f"Consulta analizada: {analysis.get('intent')}",
-            metadata=analysis,
-            level="INFO",
-            trace_id=trace_id
-        )
-        
-        # CRÍTICO: Si el usuario está autenticado y quiere crear un ticket, verificar información disponible
-        # NO pedir información adicional si podemos inferirla o generarla automáticamente
-        if analysis.get("requires_additional_info", False) and is_authenticated and session_info:
-            # Verificar si la intención es crear un ticket
-            intent = analysis.get("intent", "").lower()
-            tools_needed = analysis.get("tools_needed", [])
-            is_ticket_creation = "TICKET_CREATE" in tools_needed or any(word in intent for word in ["crear ticket", "ticket de compra", "ticket de devolución", "orden de compra", "ticket de"])
-            
-            if is_ticket_creation and session_info.get("email"):
-                import re
-                
-                # Analizar qué información está presente en la consulta
-                missing = analysis.get("missing_info", [])
-                
-                # Remover email de missing_info (está disponible en session_info)
-                if "email" in missing:
-                    missing.remove("email")
-                if "correo" in missing:
-                    missing.remove("correo")
-                
-                # Verificar si hay información en la consulta que cubra los missing_info
-                query_lower = query.lower()
-                
-                # Detectar cantidad
-                if any(word in missing for word in ["cantidad", "unidades", "productos"]):
-                    if re.search(r'\d+\s*(?:unidades?|productos?|cargadores?|paneles?|packs?)', query_lower):
-                        missing = [m for m in missing if m not in ["cantidad", "unidades", "productos"]]
-                
-                # Detectar dirección - patrones mejorados
-                if any(word in missing for word in ["dirección", "direccion", "dirección de envío", "direccion de envio", "dirección de entrega", "direccion completa"]):
-                    direction_patterns = [
-                        r'direcci[oó]n\s*(?:de\s*(?:env[ií]o|entrega))?\s*[:]?\s*([^\.]+)',
-                        r'(?:a la direccion|direccion|dirección)\s*[:]?\s*([^\.]+)',  # Captura "a la direccion 23 45 323 popayan"
-                        r'(?:carrera|calle|avenida|av\.?|cra\.?|cl\.?)\s*\d+',
-                        r'#?\s*\d+',
-                        r'popay[áa]n|bogot[áa]|medell[ií]n|cali|barranquilla|guayabal',
-                        r'\d+\s+\d+\s+\d+\s+[a-záéíóúñ]+',  # Captura "23 45 323 popayan"
-                    ]
-                    if any(re.search(pattern, query_lower) for pattern in direction_patterns):
-                        missing = [m for m in missing if m not in ["dirección", "direccion", "dirección de envío", "direccion de envio", "dirección de entrega", "direccion completa"]]
-                
-                # Detectar producto (si hay producto mencionado o en contexto)
-                if any(word in missing for word in ["producto", "productos", "artículo", "articulo"]):
-                    if re.search(r'(cargador|panel|producto|art[íi]culo)', query_lower):
-                        missing = [m for m in missing if m not in ["producto", "productos", "artículo", "articulo", "detalles del producto", "detalles adicionales del producto"]]
-                
-                # Información que el sistema puede generar automáticamente (NO debe estar en missing_info)
-                auto_generable = [
-                    "número de factura", "numero de factura", "número de pedido", "numero de pedido",
-                    "número de ticket", "numero de ticket", "ticket number", "order number"
-                ]
-                missing = [m for m in missing if not any(auto in m.lower() for auto in auto_generable)]
-                
-                # Si no quedan missing_info críticos o son opcionales, proceder a crear el ticket
-                optional_info = ["observaciones", "notas", "comentarios", "detalles adicionales"]
-                critical_missing = [m for m in missing if not any(opt in m.lower() for opt in optional_info)]
-                
-                if not critical_missing:
-                    # No hay información crítica faltante, proceder con la creación
-                    analysis["requires_additional_info"] = False
-                    analysis["missing_info"] = []
-        
-        # Verificar si necesita información adicional
-        if analysis.get("requires_additional_info", False):
-            missing = analysis.get("missing_info", [])
-            intent = analysis.get("intent", "su solicitud")
-            response = self.response_agent.request_missing_info(missing, intent)
-            
-            tracer.log(
-                operation="MISSING_INFO_REQUESTED",
-                message=f"Solicitada información adicional: {missing}",
-                metadata={"missing_info": missing, "intent": intent},
-                level="INFO",
-                trace_id=trace_id
-            )
-            
-            return response
-        
-        # PASO 2: Orchestrator ejecuta herramientas (pasar session_info para uso automático)
-        tool_results = self.orchestrator.execute_tools(analysis, enriched_query, trace_id, session_info=session_info)
-        
-        tracer.log(
-            operation="TOOLS_EXECUTED",
-            message=f"Herramientas usadas: {tool_results.get('tools_used')}",
-            metadata=tool_results,
-            level="INFO",
-            trace_id=trace_id
-        )
-        
-        # PASO 3: Response Agent genera respuesta amigable
-        response = self.response_agent.generate_response(analysis, tool_results, query, trace_id)
-        
-        # PASO 4: Extraer y guardar contexto relevante de la conversación
-        self._store_conversation_context(query, analysis, tool_results, response, session_id, trace_id)
-        
-        # Log tiempo de procesamiento total
-        processing_time = time.time() - start_time
-        tracer.log(
-            operation="USER_QUERY_COMPLETE",
-            message=f"✅ Consulta procesada en {processing_time:.2f}s",
-            metadata={
-                "query": query[:100],
-                "intent": analysis.get("intent"),
-                "tools": analysis.get("tools_needed", []),
-                "processing_time": processing_time,
-                "response_length": len(response)
-            },
-            level="SUCCESS",
-            trace_id=trace_id
-        )
-        
-        return response
-    
-    def _store_conversation_context(self, query: str, analysis: dict, tool_results: dict, response: str, session_id: str, trace_id: str = None):
-        """
-        Extraer y almacenar contexto relevante de la conversación en memoria
-        
-        Args:
-            query: Consulta del usuario
-            analysis: Análisis del orchestrator
-            tool_results: Resultados de las herramientas
-            response: Respuesta generada
-            session_id: ID de sesión
-            trace_id: ID del trace
-        """
-        try:
-            from tools.chat_memory import store_chat_memory
-            import re
-            import json
-            
-            # 1. Guardar la intención del usuario
-            intent = analysis.get("intent", "")
-            if intent:
-                store_chat_memory(session_id, "last_intent", intent, ttl_minutes=5, trace_id=trace_id)
-            
-            # 2. Extraer productos mencionados en tool_results y response
-            products_mentioned = []
-            
-            # Buscar productos en tool_results
-            for tool_name, tool_data in tool_results.get("data", {}).items():
-                if isinstance(tool_data, dict):
-                    result = tool_data.get("result", "")
-                    if isinstance(result, str):
-                        # Buscar nombres de productos (patrones comunes)
-                        # Ejemplo: "Cuaderno Reciclado", "Producto: X", etc.
-                        product_patterns = [
-                            r'📦\s*\*\*([^*\(]+)',  # Emoji 📦 seguido de producto (antes de paréntesis)
-                            r'\*\*([^*\(]+?)\*\*',  # Texto en negrita (captura antes de paréntesis)
-                            r'Producto[:\s]+([A-ZÁÉÍÓÚÑ][^\n\(]+)',  # "Producto: X"
-                            r'Nombre del Producto[:\s]+([^\n,\(]+)',  # "Nombre del Producto: X"
-                            r'📦\s+([A-ZÁÉÍÓÚÑ][^\n\(]+)',  # Emoji sin negrita
-                        ]
-                        
-                        for pattern in product_patterns:
-                            matches = re.findall(pattern, result, re.IGNORECASE)
-                            # Limpiar cada match (remover paréntesis y espacios)
-                            cleaned = [m.split('(')[0].strip() for m in matches if m.strip()]
-                            products_mentioned.extend(cleaned)
-            
-            # Buscar productos en la respuesta final
-            product_patterns = [
-                r'📦\s*\*\*([^*\(]+)',  # Emoji 📦 seguido de producto en negrita
-                r'\*\*([^*\(]+?)\*\*',  # Texto en negrita
-                r'📦\s+([A-ZÁÉÍÓÚÑ][^\n\(]+)',  # Emoji sin negrita
-            ]
-            for pattern in product_patterns:
-                matches = re.findall(pattern, response, re.IGNORECASE)
-                # Limpiar cada match
-                cleaned = [m.split('(')[0].strip() for m in matches if m.strip()]
-                products_mentioned.extend(cleaned)
-            
-            # Limpiar y deduplicar productos
-            products_mentioned = [p.strip() for p in products_mentioned if p.strip() and len(p) > 2]
-            products_mentioned = list(dict.fromkeys(products_mentioned))  # Remover duplicados
-            
-            if products_mentioned:
-                # Guardar productos mencionados (últimos 3 para no sobrecargar)
-                products_str = ", ".join(products_mentioned[:3])
-                store_chat_memory(session_id, "mentioned_products", products_str, ttl_minutes=5, trace_id=trace_id)
-            
-            # 3. Extraer información de tickets mencionados
-            ticket_pattern = r'TKT-?\d+|ticket[:\s]+([A-Z0-9-]+)'
-            ticket_matches = re.findall(ticket_pattern, response + query, re.IGNORECASE)
-            if ticket_matches:
-                tickets = ", ".join(ticket_matches)
-                store_chat_memory(session_id, "mentioned_tickets", tickets, ttl_minutes=5, trace_id=trace_id)
-            
-            # 4. Guardar contexto resumido de la última consulta
-            context_summary = f"Última intención: {intent}"
-            if products_mentioned:
-                context_summary += f". Productos mencionados: {products_str}"
-            
-            if context_summary:
-                store_chat_memory(session_id, "conversation_context", context_summary, ttl_minutes=5, trace_id=trace_id)
-                
+
+            # PASO 0: Si no está autenticado, manejar autenticación OTP primero
+            if not is_authenticated:
+                response = self._handle_authentication(query, session_id, trace_id)
+
+                # Log de finalización de autenticación
+                processing_time = time.time() - start_time
                 tracer.log(
-                    operation="CONTEXT_STORED",
-                    message="Contexto de conversación almacenado",
-                    metadata={
-                        "intent": intent,
-                        "products_count": len(products_mentioned),
-                        "session_id": session_id
-                    },
+                    operation="AUTH_HANDLED",
+                    message=f"[AUTH] Proceso de autenticación manejado",
+                    metadata={"session_id": session_id, "processing_time": processing_time},
                     level="INFO",
                     trace_id=trace_id
                 )
-                
-        except Exception as e:
+
+                return response
+
+            # PASO 1: Detectar estado de la sesión (solo si está autenticado)
+            session_state = self._get_session_state(session_id)
+
+            # PASO 2: Enrutar según el estado
+            if session_state == "NEW":
+                # Nueva sesión → Iniciar entrevista
+                response = self._start_interview(session_id, query)
+
+            elif session_state == "INTERVIEWING":
+                # Entrevista en curso → Procesar respuesta
+                response = self._continue_interview(session_id, query)
+
+            elif session_state == "ANALYZING":
+                # Entrevista completa → Analizar y recomendar
+                response = self._analyze_and_recommend(session_id)
+
+            elif session_state == "RECOMMENDING":
+                # Ya hay recomendación → Responder preguntas adicionales
+                response = self._answer_followup_question(session_id, query)
+
+            else:
+                response = "Lo siento, hubo un error. ¿Quieres empezar de nuevo?"
+
+            # Log de finalización
+            processing_time = time.time() - start_time
             tracer.log(
-                operation="CONTEXT_STORE_ERROR",
-                message=f"Error almacenando contexto: {str(e)}",
+                operation="USER_QUERY_COMPLETE",
+                message=f"[SUCCESS] Respuesta generada en {processing_time:.2f}s",
+                metadata={
+                    "session_id": session_id,
+                    "state": session_state,
+                    "processing_time": processing_time
+                },
+                level="INFO",
+                trace_id=trace_id
+            )
+
+            return response
+
+        except Exception as e:
+            print(f"[ERROR] Error processing query: {e}")
+            import traceback
+            traceback.print_exc()
+
+            tracer.log(
+                operation="USER_QUERY_ERROR",
+                message=f"[ERROR] {str(e)}",
+                metadata={"session_id": session_id},
                 level="ERROR",
                 trace_id=trace_id
             )
 
+            return self._generate_error_response()
 
-# Singleton global
+    def _get_session_state(self, session_id: str) -> str:
+        """
+        Determinar el estado actual de la sesión.
+
+        Estados posibles:
+        - NEW: Nueva sesión, no hay entrevista
+        - INTERVIEWING: Entrevista en curso
+        - ANALYZING: Entrevista completa, analizando perfil
+        - RECOMMENDING: Ya se generó recomendación, puede hacer preguntas
+
+        Returns:
+            str: Estado de la sesión
+        """
+        # Verificar si hay entrevista completa
+        interview_complete = check_interview_complete(session_id)
+
+        if interview_complete:
+            # Verificar si ya se generó recomendación
+            recommendation = get_interview_data(session_id, "recommendation")
+            if recommendation:
+                return "RECOMMENDING"
+            else:
+                return "ANALYZING"
+
+        # Verificar si hay entrevista en curso
+        current_question = get_interview_data(session_id, "current_question")
+
+        if current_question is not None and current_question > 0:
+            return "INTERVIEWING"
+
+        # Verificar si hay algún dato de entrevista
+        profile = get_interview_data(session_id, "profile")
+        if profile:
+            return "INTERVIEWING"
+
+        # Nueva sesión
+        return "NEW"
+
+    def _start_interview(self, session_id: str, first_message: str) -> str:
+        """
+        Iniciar una nueva entrevista.
+
+        Args:
+            session_id: ID de la sesión
+            first_message: Primer mensaje del usuario
+
+        Returns:
+            Primera pregunta de la entrevista
+        """
+        try:
+            # Si el usuario dice algo como "hola", "quiero información", etc.
+            # iniciamos directamente con la primera pregunta
+
+            first_question = self.interviewer.start_interview(session_id)
+
+            tracer.log(
+                operation="INTERVIEW_STARTED",
+                message="[INTERVIEW] Nueva entrevista iniciada",
+                metadata={"session_id": session_id},
+                level="INFO"
+            )
+
+            # Mensaje de bienvenida + primera pregunta
+            welcome_message = """¡Bienvenido al Sistema de Recomendación de Posgrados de la Universidad ICESI!
+
+Voy a hacerte algunas preguntas para conocerte mejor y recomendarte los programas de posgrado más adecuados para tu perfil profesional.
+
+"""
+
+            return welcome_message + first_question
+
+        except Exception as e:
+            print(f"[ERROR] Error starting interview: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"[ERROR] Hubo un error al iniciar la entrevista: {str(e)}\n\nPor favor, contacta al administrador del sistema."
+
+    def _continue_interview(self, session_id: str, answer: str) -> str:
+        """
+        Continuar con la entrevista procesando la respuesta del usuario.
+
+        Args:
+            session_id: ID de la sesión
+            answer: Respuesta del usuario
+
+        Returns:
+            Siguiente pregunta o confirmación de finalización
+        """
+        try:
+            # Procesar la respuesta con el INTERVIEWER Agent
+            result = self.interviewer.process_answer(answer, session_id)
+
+            # Verificar si hay error de validación
+            if result.get("validation_error"):
+                return f"{result['validation_error']}\n\n{result.get('next_question', '')}"
+
+            # Verificar si la entrevista está completa
+            if result.get("profile_complete"):
+                # Guardar flag de completado
+                from tools.chat_memory import store_interview_data
+                store_interview_data(session_id, "interview_complete", True)
+
+                tracer.log(
+                    operation="INTERVIEW_COMPLETE",
+                    message="[INTERVIEW] Entrevista completada",
+                    metadata={"session_id": session_id},
+                    level="INFO"
+                )
+
+                # Mensaje de transición + análisis automático
+                transition_message = result.get("message", "¡Perfecto! He recopilado toda la información.")
+
+                # Analizar y generar recomendación inmediatamente
+                recommendation = self._analyze_and_recommend(session_id)
+
+                return f"{transition_message}\n\n{recommendation}"
+
+            # Entrevista continúa → retornar siguiente pregunta
+            next_question = result.get("next_question", "")
+            progress = result.get("current_progress", "")
+
+            response = f"{next_question}"
+            if progress:
+                response = f"[Progreso: {progress}]\n\n{response}"
+
+            return response
+
+        except Exception as e:
+            print(f"[ERROR] Error continuing interview: {e}")
+            import traceback
+            traceback.print_exc()
+            return "Lo siento, hubo un error procesando tu respuesta. ¿Podrías repetir?"
+
+    def _analyze_and_recommend(self, session_id: str) -> str:
+        """
+        Analizar el perfil del estudiante y generar recomendación.
+
+        Este método coordina PROFILER Agent + RECOMMENDER Agent
+
+        Args:
+            session_id: ID de la sesión
+
+        Returns:
+            Recomendación personalizada
+        """
+        try:
+            # Obtener perfil completo de la entrevista
+            profile = self.interviewer.get_current_profile(session_id)
+
+            if not profile:
+                return "Lo siento, no pude recuperar tu perfil. ¿Quieres empezar de nuevo?"
+
+            tracer.log(
+                operation="PROFILE_ANALYSIS_START",
+                message="[PROFILER] Iniciando análisis de perfil",
+                metadata={"session_id": session_id},
+                level="INFO"
+            )
+
+            # PASO 1: PROFILER Agent analiza el perfil
+            profiler_results = self.profiler.analyze_profile(profile, session_id)
+
+            if profiler_results.get("error"):
+                return f"Hubo un error al analizar tu perfil: {profiler_results['error']}"
+
+            tracer.log(
+                operation="PROFILE_ANALYSIS_COMPLETE",
+                message="[PROFILER] Análisis completado",
+                metadata={
+                    "session_id": session_id,
+                    "top_programs": [m["program_name"] for m in profiler_results.get("top_matches", [])]
+                },
+                level="INFO"
+            )
+
+            # PASO 2: RECOMMENDER Agent genera la recomendación
+            tracer.log(
+                operation="RECOMMENDATION_GENERATION_START",
+                message="[RECOMMENDER] Generando recomendación",
+                metadata={"session_id": session_id},
+                level="INFO"
+            )
+
+            recommendation = self.recommender.generate_recommendation(
+                profiler_results,
+                profile
+            )
+
+            # Guardar recomendación en memoria
+            from tools.chat_memory import store_interview_data
+            store_interview_data(session_id, "recommendation", recommendation)
+            store_interview_data(session_id, "profiler_results", profiler_results)
+
+            tracer.log(
+                operation="RECOMMENDATION_GENERATION_COMPLETE",
+                message="[RECOMMENDER] Recomendación generada",
+                metadata={"session_id": session_id},
+                level="INFO"
+            )
+
+            return recommendation
+
+        except Exception as e:
+            print(f"[ERROR] Error analyzing and recommending: {e}")
+            import traceback
+            traceback.print_exc()
+
+            return """Lo siento, hubo un error al generar tu recomendación personalizada.
+
+Por favor, contacta directamente a nuestro equipo de admisiones:
+
+📧 admisiones.posgrados@icesi.edu.co
+📱 WhatsApp: +57 318 765 4321
+
+Estaremos encantados de ayudarte personalmente."""
+
+    def _answer_followup_question(self, session_id: str, question: str) -> str:
+        """
+        Responder preguntas adicionales después de la recomendación.
+
+        Args:
+            session_id: ID de la sesión
+            question: Pregunta del usuario
+
+        Returns:
+            Respuesta a la pregunta
+        """
+        try:
+            # Obtener contexto de la recomendación
+            profiler_results = get_interview_data(session_id, "profiler_results")
+
+            # Usar RECOMMENDER Agent para responder preguntas específicas
+            response = self.recommender.answer_specific_question(
+                question,
+                context=profiler_results
+            )
+
+            tracer.log(
+                operation="FOLLOWUP_QUESTION_ANSWERED",
+                message="[RECOMMENDER] Pregunta adicional respondida",
+                metadata={"session_id": session_id, "question": question[:100]},
+                level="INFO"
+            )
+
+            return response
+
+        except Exception as e:
+            print(f"[ERROR] Error answering followup question: {e}")
+            return """Puedo ayudarte con información específica sobre los programas recomendados.
+
+Si necesitas información detallada, no dudes en contactar admisiones:
+📧 admisiones.posgrados@icesi.edu.co
+📱 WhatsApp: +57 318 765 4321"""
+
+    def _handle_authentication(self, query: str, session_id: str = "default_session", trace_id: str = None) -> str:
+        """
+        Manejar el proceso de autenticación OTP.
+
+        Detecta si el usuario está:
+        1. Enviando email + nombre (OTP_SEND)
+        2. Enviando código de verificación (OTP_VERIFY)
+
+        Args:
+            query: Mensaje del usuario
+            session_id: ID de sesión del usuario
+            trace_id: ID de trace para logging
+
+        Returns:
+            Respuesta del sistema de autenticación
+        """
+        import re
+        from tools.otp_auth import send_otp_to_user, verify_otp_code
+        from tools.chat_memory import store_chat_memory
+
+        # Detectar si hay un código de 6 dígitos (OTP_VERIFY)
+        otp_pattern = r'\b\d{6}\b'
+        otp_match = re.search(otp_pattern, query)
+
+        if otp_match:
+            # Usuario está enviando código OTP
+            otp_code = otp_match.group(0)
+
+            # Recuperar email de memoria temporal
+            from tools.chat_memory import retrieve_chat_memory
+            email_memory = retrieve_chat_memory(session_id, "email")
+
+            if not email_memory.get("found"):
+                return """No he encontrado tu correo electrónico en mi memoria.
+
+Por favor, vuelve a proporcionarme tu correo electrónico y nombre para enviarte un nuevo código."""
+
+            email = email_memory.get("memory_value")
+
+            # Verificar OTP
+            verification_result = verify_otp_code(email, otp_code, trace_id)
+
+            return verification_result.get("message", "Error en la verificación.")
+
+        # Detectar si hay un email (OTP_SEND)
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        email_match = re.search(email_pattern, query)
+
+        if email_match:
+            email = email_match.group(0)
+
+            # Extraer nombre (todo lo que no sea el email)
+            name_candidate = query.replace(email, "").strip()
+            # Limpiar palabras comunes
+            name_candidate = re.sub(r'\b(mi|nombre|es|soy|me|llamo|correo|email)\b', '', name_candidate, flags=re.IGNORECASE).strip()
+
+            # Si no hay nombre, usar "usuario"
+            name = name_candidate if name_candidate else None
+
+            # Guardar email en memoria temporal
+            store_chat_memory(session_id, "email", email, ttl_minutes=10)
+            if name:
+                store_chat_memory(session_id, "name", name, ttl_minutes=10)
+
+            # Enviar OTP
+            otp_result = send_otp_to_user(email, name, trace_id)
+
+            return otp_result.get("message", "Error al enviar el código.")
+
+        # No se detectó ni email ni código
+        return """Para comenzar, necesito tu correo electrónico y nombre.
+
+Por favor proporcióname:
+1. Tu correo electrónico
+2. Tu nombre completo
+
+Ejemplo: "Mi correo es juan.perez@ejemplo.com y mi nombre es Juan Pérez"
+"""
+
+    def _generate_error_response(self) -> str:
+        """Generar respuesta de error genérica"""
+        return """Lo siento, hubo un error procesando tu solicitud.
+
+Por favor, intenta de nuevo o contacta directamente a:
+
+📧 admisiones.posgrados@icesi.edu.co
+📱 WhatsApp: +57 318 765 4321
+🌐 www.icesi.edu.co/posgrados
+
+¡Estamos aquí para ayudarte!"""
+
+    def reset_session(self, session_id: str) -> bool:
+        """
+        Reiniciar una sesión (útil para empezar de nuevo).
+
+        Args:
+            session_id: ID de la sesión a reiniciar
+
+        Returns:
+            bool: True si se reinició exitosamente
+        """
+        try:
+            from tools.chat_memory import clear_interview_data
+            clear_interview_data(session_id)
+
+            tracer.log(
+                operation="SESSION_RESET",
+                message="[SYSTEM] Sesión reiniciada",
+                metadata={"session_id": session_id},
+                level="INFO"
+            )
+
+            return True
+
+        except Exception as e:
+            print(f"[ERROR] Error resetting session: {e}")
+            return False
+
+
+# Singleton instance
 _intelligent_agent_instance = None
 
-def get_intelligent_agent():
-    """Obtener instancia global del agente inteligente"""
+def get_intelligent_agent() -> IntelligentAgent:
+    """Obtener instancia singleton del agente inteligente"""
     global _intelligent_agent_instance
     if _intelligent_agent_instance is None:
         _intelligent_agent_instance = IntelligentAgent()
     return _intelligent_agent_instance
+
+
+# Para testing
+if __name__ == "__main__":
+    agent = get_intelligent_agent()
+
+    print("[TEST] Sistema de Recomendación de Posgrados")
+    print("=" * 60)
+
+    # Simular conversación
+    session_id = "test_session_001"
+
+    # Primera interacción
+    response1 = agent.process_query("Hola, quiero información sobre posgrados", session_id=session_id)
+    print(f"\n[AGENT]: {response1}")
+
+    # Simular respuestas
+    test_answers = [
+        "Mi nombre es Juan Pérez",
+        "Estudié Ingeniería de Sistemas en la Universidad del Valle",
+        "Tengo 5 años de experiencia en desarrollo de software y machine learning",
+        "Me interesan la inteligencia artificial, análisis de datos y machine learning",
+        "Quiero especializarme en IA para liderar proyectos de innovación tecnológica",
+        "Tengo habilidades en Python, TensorFlow, machine learning y análisis de datos",
+        "Prefiero estudiar tiempo parcial en horario nocturno",
+        "Mi email es juan.perez@example.com y mi teléfono es 3001234567"
+    ]
+
+    for i, answer in enumerate(test_answers, 2):
+        print(f"\n[USER]: {answer}")
+        response = agent.process_query(answer, session_id=session_id)
+        print(f"\n[AGENT]: {response}")
+
+    # Pregunta adicional
+    print(f"\n[USER]: ¿Cuánto cuesta la Maestría en Ciencia de Datos?")
+    response = agent.process_query(
+        "¿Cuánto cuesta la Maestría en Ciencia de Datos?",
+        session_id=session_id
+    )
+    print(f"\n[AGENT]: {response}")
+
+    print("\n" + "=" * 60)
+    print("[TEST] Finalizado")

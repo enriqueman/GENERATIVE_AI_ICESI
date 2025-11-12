@@ -18,10 +18,10 @@ def stream_response(response):
         time.sleep(0.05)
 
 def public_chat():
-    """Public chat interface for customers"""
-    
+    """Public chat interface for prospective graduate students"""
+
     # Subtítulo (el header principal se maneja en theme_utils)
-    st.markdown("<p class='subtitle'>Tu compañero para productos sostenibles</p>", unsafe_allow_html=True)
+    st.markdown("<p class='subtitle'>Sistema de Recomendación de Posgrados</p>", unsafe_allow_html=True)
     
     # Initialize session state for authentication
     if 'chat_authenticated' not in st.session_state:
@@ -55,15 +55,16 @@ def public_chat():
             with st.container():
                 st.markdown("""
                     <div class='welcome-box'>
-                        <h3>👋 ¡Bienvenido a EcoMarket!</h3>
-                        <p>Estoy aquí para ayudarte con:</p>
+                        <h3>[GRADUATE] ¡Bienvenido al Sistema de Recomendación de Posgrados ICESI!</h3>
+                        <p>Estoy aquí para ayudarte a encontrar el posgrado ideal para tu perfil profesional.</p>
+                        <p>Te haré algunas preguntas sobre:</p>
                         <ul>
-                            <li>📦 Estado de pedidos y envíos</li>
-                            <li>🔄 Políticas de devolución y cambio</li>
-                            <li>🌱 Información sobre productos sostenibles</li>
-                            <li>💳 Métodos de pago y facturación</li>
-                            <li>❓ Preguntas frecuentes</li>
+                            <li>[USER] Tu formación académica y experiencia</li>
+                            <li>[TARGET] Tus intereses y objetivos profesionales</li>
+                            <li>[SKILLS] Tus habilidades y competencias</li>
+                            <li>[CALENDAR] Tu disponibilidad de tiempo</li>
                         </ul>
+                        <p>Al finalizar, te recomendaré los programas más adecuados para ti.</p>
                     </div>
                 """, unsafe_allow_html=True)
                 st.session_state.auth_welcome_shown = True
@@ -71,17 +72,19 @@ def public_chat():
         # Show authentication prompt from agent if no messages
         if not messages:
             # Initial greeting asking for authentication
-            initial_greeting = """¡Hola! Un gusto saludarte 👋
+            initial_greeting = """[GRADUATE] ¡Bienvenido/a al Sistema de Recomendación de Posgrados de la Universidad ICESI!
 
-Para continuar y poder ayudarte mejor, necesitamos que te autentiques. 
+Soy tu asistente de admisiones y voy a ayudarte a encontrar el programa de posgrado que mejor se ajuste a tu perfil profesional.
+
+Para comenzar con la entrevista de recomendación, necesito que te registres.
 
 Por favor, proporciona:
 1. Tu correo electrónico
-2. Tu nombre
+2. Tu nombre completo
 
-Una vez que me proporciones esta información, te enviaré un código de verificación a tu correo para completar el proceso de autenticación."""
-            
-            with st.chat_message("assistant", avatar="🌿"):
+Te enviaré un código de verificación a tu correo para confirmar tu identidad y comenzar con la entrevista."""
+
+            with st.chat_message("assistant", avatar="🎓"):
                 st.markdown(initial_greeting)
         else:
             # Display existing chat history
@@ -90,11 +93,11 @@ Una vez que me proporciones esta información, te enviaré un código de verific
                     with st.chat_message("user"):
                         st.markdown(content)
                 elif sender == "ai":
-                    with st.chat_message("assistant", avatar="🌿"):
+                    with st.chat_message("assistant", avatar="🎓"):
                         st.markdown(content)
-        
+
         # Chat input for unauthenticated users
-        prompt = st.chat_input("Escribe tu correo y nombre para autenticarte...")
+        prompt = st.chat_input("Escribe tu correo y nombre para registrarte...")
         
         if prompt:
             # Save user message
@@ -107,32 +110,39 @@ Una vez que me proporciones esta información, te enviaré un código de verific
             try:
                 # Use intelligent agent to process authentication request
                 agent = get_intelligent_agent()
-                
+
+                # Usar session_id basado en el CHAT_ID para mantener consistencia
+                session_id = f"chat_{CHAT_ID}"
+
                 # Process query (agent will handle OTP_SEND or OTP_VERIFY based on query content)
-                response = agent.process_query(prompt, enable_logging=False)
-                
+                response = agent.process_query(prompt, enable_logging=False, session_id=session_id)
+
             except Exception as e:
                 response = """
-                😔 Lo siento, tuve un problema al procesar tu consulta.
-                
-                Por favor, intenta nuevamente o contacta a nuestro equipo:
-                - 📧 soporte@ecomarket.com
-                - 📞 +57 324 456 4450
+                [ERROR] Lo siento, tuve un problema al procesar tu registro.
+
+                Por favor, intenta nuevamente o contacta a nuestro equipo de admisiones:
+                - [EMAIL] admisiones.posgrados@icesi.edu.co
+                - [PHONE] +57 (2) 555-2000
+                - [WHATSAPP] +57 318 765 4321
                 """
             
             # Save AI response
             create_message(CHAT_ID, "ai", response)
             
             # Display AI response with streaming
-            with st.chat_message("assistant", avatar="🌿"):
+            with st.chat_message("assistant", avatar="🎓"):
                 st.write_stream(stream_response(response))
             
             # Check if response indicates successful authentication
-            if "✅" in response and ("autenticación exitosa" in response.lower() or "ya puedes usar" in response.lower()):
+            print(f"[DEBUG] Checking authentication in response: {response[:100]}")
+            if "[OK]" in response and "autenticación exitosa" in response.lower():
+                print(f"[DEBUG] Authentication detected! Retrieving email from session_id: {session_id}")
                 # Get email from session memory (not from prompt, as prompt might only have OTP code)
                 from tools.chat_memory import retrieve_chat_memory
-                session_id = "default_session"
+                # Usar el mismo session_id que usamos arriba
                 email_memory = retrieve_chat_memory(session_id, "email")
+                print(f"[DEBUG] Email memory found: {email_memory}")
                 
                 # Try to get email from memory first, then from prompt as fallback
                 email = None
@@ -146,12 +156,14 @@ Una vez que me proporciones esta información, te enviaré un código de verific
                         email = email_match.group(0)
                 
                 if email:
+                    print(f"[DEBUG] Email found: {email}, proceeding with authentication setup")
                     # Get user and session info - wait a moment for DB to be updated
                     import time
                     time.sleep(0.1)  # Small delay to ensure DB is updated
-                    
+
                     from models.db import get_chat_user_by_email
                     user = get_chat_user_by_email(email)
+                    print(f"[DEBUG] User from DB: {user}")
                     
                     # Mark as authenticated if not already (in case of timing issue)
                     if user and not user.get("authenticated"):
@@ -173,12 +185,16 @@ Una vez que me proporciones esta información, te enviaré un código de verific
                         conn.close()
                         
                         if session_result:
+                            print(f"[DEBUG] Setting session state for authenticated user")
                             st.session_state.chat_session_token = session_result[0]
                             st.session_state.chat_authenticated = True
                             st.session_state.chat_user_email = email
                             st.session_state.chat_user_name = user.get("name") or "Usuario"
+                            print(f"[DEBUG] Session state updated. Forcing rerun...")
                             # Force immediate rerun to update authentication state
                             st.rerun()
+                        else:
+                            print(f"[DEBUG] No session token found for user")
     
     else:
         # User is authenticated - show full chat functionality
@@ -189,11 +205,11 @@ Una vez que me proporciones esta información, te enviaré un código de verific
                     with st.chat_message("user"):
                         st.markdown(content)
                 elif sender == "ai":
-                    with st.chat_message("assistant", avatar="🌿"):
+                    with st.chat_message("assistant", avatar="🎓"):
                         st.markdown(content)
         
         # Chat input for authenticated users
-        prompt = st.chat_input("Escribe tu pregunta aquí...")
+        prompt = st.chat_input("Escribe tu respuesta aquí...")
         
         if prompt:
             # Verificar nuevamente el estado de autenticación antes de procesar
@@ -231,53 +247,66 @@ Una vez que me proporciones esta información, te enviaré un código de verific
                 # Pasar is_authenticated=True porque el usuario ya está autenticado
                 # También pasar información de sesión (email, nombre) para uso automático
                 agent = get_intelligent_agent()
+
+                # Usar session_id basado en el CHAT_ID para mantener consistencia
+                session_id = f"chat_{CHAT_ID}"
+
                 session_info = {
                     "email": st.session_state.chat_user_email,
                     "name": st.session_state.chat_user_name
                 } if st.session_state.chat_user_email else None
-                response = agent.process_query(prompt, enable_logging=False, is_authenticated=True, session_info=session_info)
+                response = agent.process_query(prompt, enable_logging=False, session_id=session_id, is_authenticated=True, session_info=session_info)
             except Exception as e:
                 response = """
-                😔 Lo siento, tuve un problema al procesar tu consulta.
-                
-                Por favor, intenta nuevamente o contacta a nuestro equipo:
-                - 📧 soporte@ecomarket.com
-                - 📞 +57 324 456 4450
+                [ERROR] Lo siento, tuve un problema al procesar tu respuesta.
+
+                Por favor, intenta nuevamente o contacta a nuestro equipo de admisiones:
+                - [EMAIL] admisiones.posgrados@icesi.edu.co
+                - [PHONE] +57 (2) 555-2000
+                - [WHATSAPP] +57 318 765 4321
                 """
             
             # Save AI response
             create_message(CHAT_ID, "ai", response)
             
             # Display AI response with streaming
-            with st.chat_message("assistant", avatar="🌿"):
+            with st.chat_message("assistant", avatar="🎓"):
                 st.write_stream(stream_response(response))
     
     # Sidebar with info
     with st.sidebar:
-        st.markdown("### 📞 Contacto Directo")
+        st.markdown("### [PHONE] Contacto Admisiones")
         st.markdown("""
             Si necesitas asistencia personalizada:
-            
-            **Email:** ceman217@gmail.com
-            
-            **Teléfono:** +57 300 733 5302
-            
-            **WhatsApp:** +57 300 733 5302
-            
+
+            **Email:** admisiones.posgrados@icesi.edu.co
+
+            **Teléfono:** +57 (2) 555-2000
+
+            **WhatsApp:** +57 318 765 4321
+
             **Horario de atención:**
-            Lunes a Viernes: 9:00 AM - 6:00 PM
-            Sábados: 10:00 AM - 2:00 PM
+            Lunes a Viernes: 8:00 AM - 6:00 PM
+            Sábados: 9:00 AM - 1:00 PM
         """)
-        
+
         st.markdown("---")
-        
-        st.markdown("### 🌿 Sobre EcoMarket")
+
+        st.markdown("### [GRADUATE] Sobre Nuestros Posgrados")
         st.markdown("""
-            Somos tu tienda de productos sostenibles, 
-            comprometidos con el medio ambiente y 
-            la calidad de vida.
+            La Universidad ICESI ofrece programas de posgrado
+            de alta calidad, diseñados para profesionales que
+            buscan impulsar su carrera y transformar su futuro.
+
+            **Programas disponibles:**
+            - Maestría en Ciencia de Datos
+            - Maestría en Ingeniería de Software
+            - MBA - Administración
+            - Maestría en Marketing Digital
+
+            [WEB] www.icesi.edu.co/posgrados
         """)
-        
+
         st.markdown("---")
         
 

@@ -12,8 +12,8 @@ from utils.vector_functions import initialize_sample_collection
 
 # Page configuration
 st.set_page_config(
-    page_title="EcoMarket - Asistente Virtual",
-    page_icon="🌿",
+    page_title="Universidad ICESI - Sistema de Recomendación de Posgrados",
+    page_icon="[GRADUATE]",
     layout="wide",
     initial_sidebar_state="expanded"
 )

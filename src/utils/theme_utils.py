@@ -22,9 +22,9 @@ def render_theme_selector():
     # Crear un header personalizado con el selector de temas integrado
     st.markdown("""
         <div class="custom-header">
-            <h1>🌿 EcoMarket - Asistente Virtual</h1>
+            <h1>[GRADUATE] Universidad ICESI - Sistema de Recomendación de Posgrados</h1>
             <div class="theme-controls">
-                <span>🎨 Tema:</span>
+                <span>[THEME] Tema:</span>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -80,9 +80,9 @@ def render_header_with_theme_selector():
     # Crear un header personalizado con el selector de temas integrado
     st.markdown("""
         <div class="custom-header">
-            <h1>🌿 EcoMarket - Asistente Virtual</h1>
+            <h1>[GRADUATE] Universidad ICESI - Sistema de Recomendación de Posgrados</h1>
             <div class="theme-controls">
-                <span>🎨 Tema:</span>
+                <span>[THEME] Tema:</span>
             </div>
         </div>
     """, unsafe_allow_html=True)

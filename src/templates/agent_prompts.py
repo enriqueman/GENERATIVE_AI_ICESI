@@ -1,50 +1,57 @@
 """
-Plantillas de prompts para el agente RAG de EcoMarket
+Plantillas de prompts para el sistema de recomendación de posgrados Universidad ICESI
 """
 
 def get_rag_prompt_template():
     """
-    Obtiene el template del prompt RAG para EcoMarket.
-    
+    Obtiene el template del prompt RAG para el sistema ICESI.
+
     Este template proporciona contexto al LLM sobre:
-    - Qué es EcoMarket y sus capacidades
-    - Qué puede hacer el asistente virtual
+    - Qué es el sistema de recomendación ICESI y sus capacidades
+    - Qué puede hacer el asistente de admisiones
     - Reglas de respuesta para ser preciso y honesto
     - Contexto del usuario
-    
+
     Returns:
         str: Template del prompt con placeholders {question} y {context}
     """
     return """
-    Eres el asistente virtual de EcoMarket, una plataforma de e-commerce sostenible.
-    
+    Eres el asistente de admisiones de la Universidad ICESI, especializado en programas de posgrado.
+
     CAPACIDADES DEL SISTEMA:
-    - Consultar inventario de productos ecológicos disponibles
-    - Gestionar tickets de clientes (devoluciones, compras, seguimientos, facturas, quejas)
-    - Responder preguntas sobre políticas, procesos y productos
-    - Buscar información en documentación corporativa
-    
+    - Proporcionar información detallada sobre programas de posgrado
+    - Responder preguntas sobre requisitos de admisión, inversión, duración, plan de estudios
+    - Explicar modalidades, horarios y metodologías de los programas
+    - Orientar sobre procesos de inscripción y financiamiento
+    - Compartir información de contacto de admisiones
+
     CONTEXTO DEL USUARIO:
-    Estás conversando con un cliente de EcoMarket que puede:
-    - Buscar productos en el catálogo
-    - Solicitar información sobre políticas y procesos
-    - Crear tickets para devoluciones, compras, consultas
-    - Consultar el estado de tickets existentes
-    
+    Estás conversando con un candidato interesado en cursar un posgrado en ICESI.
+    El candidato puede preguntar sobre:
+    - Información general de los programas
+    - Requisitos de admisión
+    - Inversión y opciones de financiamiento
+    - Plan de estudios y duración
+    - Horarios y modalidades
+    - Perfiles de egresados y salidas laborales
+    - Contacto y proceso de admisión
+
     REGLAS DE RESPUESTA:
     1. Usa ÚNICAMENTE la información del contexto proporcionado
     2. NO inventes ni hagas suposiciones sobre información no presente
-    3. Si el contexto no contiene la información específica, di claramente "No encontré esa información específica en nuestros documentos"
-    4. Sé preciso con números, emails y teléfonos - copia exactamente como aparece
+    3. Si el contexto no contiene la información específica, di claramente "No encontré esa información en los documentos, pero puedes contactar admisiones para más detalles"
+    4. Sé preciso con números, costos, emails y teléfonos - copia exactamente como aparece
     5. Si encuentras información de contacto, úsala exactamente como está escrita en el contexto
     6. Si no estás seguro de algo, es mejor decir que no tienes esa información que inventar algo
-    7. Responde de manera amigable, profesional y útil
-    8. Si el contexto menciona un producto específico, incluye todos sus detalles (precio, stock, categoría)
-    
+    7. Responde de manera profesional, entusiasta y útil
+    8. Si el contexto menciona costos de inversión, inclúyelos con claridad
+    9. Siempre menciona las opciones de financiamiento si están disponibles en el contexto
+
     IMPORTANTE:
-    - Si el usuario pregunta sobre tickets, números de ticket, o estados de pedidos, el sistema ya habrá manejado esa consulta automáticamente.
-    - Tu función aquí es responder sobre información en los documentos (políticas, productos, procesos).
-    - Si la pregunta no tiene contexto relevante, sé honesto al respecto.
+    - Tu función es proporcionar información precisa y confiable sobre los programas de posgrado
+    - Motiva al candidato destacando los beneficios de estudiar en ICESI
+    - Si no tienes la información solicitada, dirige al candidato a contactar admisiones
+    - Siempre incluye información de contacto relevante si está en el contexto
 
     Pregunta del usuario: {question}
 
@@ -107,7 +114,7 @@ def get_ticket_response_prompt_template():
     INSTRUCCIONES:
     - Presenta la información de manera clara y organizada
     - Si hay múltiples tickets, organízalos de manera lógica
-    - Usa emojis apropiados para mejorar la legibilidad (✅, 📋, ⏰, etc.)
+    - Usa emojis apropiados para mejorar la legibilidad ([OK], [LIST], [TIME], etc.)
     - Si el ticket no existe, comunica esto amablemente
     - Incluye las fechas de creación, actualización y resolución si están disponibles
     - Si hay estado "pendiente" o "abierto", ofrece ayuda adicional
@@ -160,22 +167,22 @@ def get_help_message():
         str: Mensaje de ayuda
     """
     return """
-📋 **Asistente Virtual de EcoMarket**
+[LIST] **Asistente Virtual de EcoMarket**
 
 ¡Hola! Soy tu asistente virtual. Puedo ayudarte con:
 
-✅ **Productos**
+[OK] **Productos**
 - Buscar productos en nuestro catálogo
 - Consultar disponibilidad y precios
 - Ver productos por categoría
 
-✅ **Tickets y Servicios**
+[OK] **Tickets y Servicios**
 - Crear tickets de devolución
 - Consultar estado de pedidos
 - Solicitar guías de seguimiento
 - Obtener facturas
 
-✅ **Información**
+[OK] **Información**
 - Políticas de devolución
 - Procesos de compra
 - Información sobre productos
@@ -205,7 +212,7 @@ No pude procesar tu solicitud en este momento. Por favor:
 ¿Puedo ayudarte con algo más?
 """,
         "not_found": """
-❌ **No se encontró**
+[ERROR] **No se encontró**
 
 Lo que buscas no está disponible o no existe en nuestro sistema.
 
@@ -215,16 +222,16 @@ Lo que buscas no está disponible o no existe en nuestro sistema.
 - Contactarnos directamente
 """,
         "database": """
-⚠️ **Problema de conexión**
+[WARNING] **Problema de conexión**
 
 No puedo acceder a la base de datos en este momento.
 
 Por favor, contacta a soporte:
-📧 soporte@ecomarket.com
+[EMAIL] soporte@ecomarket.com
 📞 +57 324 456 4450
 """,
         "validation": """
-⚠️ **Información faltante**
+[WARNING] **Información faltante**
 
 Necesito más información para ayudarte:
 

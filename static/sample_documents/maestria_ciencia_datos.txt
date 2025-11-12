@@ -1,0 +1,145 @@
+MAESTRÍA EN CIENCIA DE DATOS
+Universidad ICESI - Facultad de Ingeniería
+
+==================================================
+INFORMACIÓN GENERAL
+==================================================
+
+La Maestría en Ciencia de Datos de la Universidad ICESI forma profesionales capaces de extraer conocimiento valioso de grandes volúmenes de datos, utilizando técnicas avanzadas de machine learning, estadística y programación.
+
+Duración: 4 semestres (2 años)
+Modalidad: Presencial con componente virtual
+Horario: Viernes 6:00 PM - 10:00 PM y Sábados 8:00 AM - 5:00 PM
+Inicio de clases: Febrero y Agosto de cada año
+
+==================================================
+PERFIL DEL CANDIDATO
+==================================================
+
+Este programa está dirigido a:
+- Ingenieros de Sistemas, Software, Electrónicos o afines
+- Profesionales en Matemáticas, Estadística o áreas cuantitativas
+- Profesionales con experiencia en análisis de datos o desarrollo de software
+- Personas interesadas en machine learning e inteligencia artificial
+
+Experiencia laboral recomendada: Mínimo 2 años en áreas relacionadas con tecnología o datos
+
+==================================================
+REQUISITOS DE INGRESO
+==================================================
+
+- Título profesional en áreas de ingeniería, ciencias exactas o afines
+- Conocimientos básicos de programación (Python preferiblemente)
+- Conocimientos de estadística descriptiva e inferencial
+- Nivel de inglés B1 o superior (se evalúa en el proceso de admisión)
+- Presentar examen de admisión enfocado en lógica matemática y programación
+- Entrevista con el director del programa
+
+==================================================
+PLAN DE ESTUDIOS
+==================================================
+
+SEMESTRE 1:
+- Fundamentos de Programación Científica con Python
+- Estadística Inferencial Avanzada
+- Álgebra Lineal para Ciencia de Datos
+- Gestión y Visualización de Datos
+
+SEMESTRE 2:
+- Machine Learning Supervisado
+- Bases de Datos NoSQL y Big Data
+- Minería de Datos
+- Programación en R para Análisis Estadístico
+
+SEMESTRE 3:
+- Machine Learning No Supervisado
+- Deep Learning y Redes Neuronales
+- Procesamiento de Lenguaje Natural
+- Ética y Privacidad en Ciencia de Datos
+
+SEMESTRE 4:
+- Proyecto de Grado
+- Despliegue de Modelos en Producción
+- Electiva de Profundización (Computer Vision, Series de Tiempo, o Sistemas de Recomendación)
+
+==================================================
+COMPETENCIAS QUE DESARROLLARÁS
+==================================================
+
+- Diseño e implementación de modelos de machine learning
+- Procesamiento y análisis de grandes volúmenes de datos (Big Data)
+- Visualización efectiva de datos para toma de decisiones
+- Programación avanzada en Python, R y SQL
+- Despliegue de modelos en entornos de producción
+- Comunicación técnica de resultados analíticos
+- Pensamiento crítico para resolver problemas complejos con datos
+
+==================================================
+SALIDAS LABORALES
+==================================================
+
+Los egresados pueden desempeñarse como:
+- Data Scientist
+- Machine Learning Engineer
+- Data Engineer
+- Analista de Datos Senior
+- Consultor en Inteligencia Artificial
+- Líder de equipos de analítica avanzada
+- Investigador en IA y Machine Learning
+
+Sectores de alta demanda:
+- Tecnología y startups
+- Sector financiero y bancario
+- E-commerce y retail
+- Salud y biotecnología
+- Consultoría y servicios
+- Gobierno y sector público
+
+==================================================
+INVERSIÓN Y FINANCIAMIENTO
+==================================================
+
+Inversión por semestre: $12,500,000 COP
+Inversión total programa: $50,000,000 COP
+
+Opciones de financiamiento:
+- Descuento del 15% por pago de contado del semestre
+- Convenios con ICETEX (créditos educativos de largo plazo)
+- Becas por mérito académico (hasta 30% de descuento)
+- Convenios empresariales (descuento del 20% para colaboradores de empresas aliadas)
+
+==================================================
+INFRAESTRUCTURA Y RECURSOS
+==================================================
+
+- Laboratorios de cómputo con GPUs para Deep Learning
+- Acceso a plataformas cloud (AWS, Google Cloud, Azure)
+- Licencias de software especializado (MATLAB, SAS, Tableau)
+- Biblioteca digital con acceso a bases de datos científicas
+- Cluster de cómputo de alto rendimiento
+- Convenios con empresas para proyectos reales
+
+==================================================
+INFORMACIÓN DE CONTACTO
+==================================================
+
+Coordinación del Programa:
+Email: maestria.datos@icesi.edu.co
+Teléfono: +57 (2) 555-2000 ext. 8234
+WhatsApp: +57 318 765 4321
+
+Oficina de Admisiones:
+Email: admisiones.posgrados@icesi.edu.co
+Dirección: Campus Universidad ICESI, Calle 18 No. 122-135, Cali, Colombia
+
+Sitio web: www.icesi.edu.co/maestria-ciencia-datos
+
+==================================================
+CONVENIOS INTERNACIONALES
+==================================================
+
+La Universidad ICESI tiene convenios con:
+- Massachusetts Institute of Technology (MIT) - USA
+- Universidad Politécnica de Madrid - España
+- Tecnológico de Monterrey - México
+- Oportunidades de doble titulación con universidades europeas

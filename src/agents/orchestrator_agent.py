@@ -50,7 +50,7 @@ class OrchestratorAgent:
     def _initialize(self):
         """Inicializar el LLM para reasoning"""
         if not LLM_AVAILABLE:
-            print("⚠️  LLM no disponible para reasoning")
+            print("[WARNING]  LLM no disponible para reasoning")
             return
         
         try:
@@ -62,9 +62,9 @@ class OrchestratorAgent:
                 api_key=env("OPENAI_API_KEY"),
                 temperature=0.1  # Muy baja temperatura para reasoning preciso
             )
-            print("✅ Orchestrator Agent inicializado")
+            print("[OK] Orchestrator Agent inicializado")
         except Exception as e:
-            print(f"⚠️  Error inicializando LLM para reasoning: {e}")
+            print(f"[WARNING]  Error inicializando LLM para reasoning: {e}")
             self.llm_reasoning = None
     
     def is_ready(self):
@@ -126,13 +126,13 @@ class OrchestratorAgent:
             reasoning_prompt_template = get_agent_reasoning_prompt()
             # Agregar contexto de autenticación al prompt
             if is_authenticated:
-                auth_context = "\n\n⚠️ CONTEXTO CRÍTICO DE AUTENTICACIÓN:\nEl usuario YA ESTÁ AUTENTICADO en el sistema. NO debes activar herramientas OTP_SEND o OTP_VERIFY bajo ninguna circunstancia. Procesa la consulta como una solicitud normal del usuario autenticado (puede usar RAG_SEARCH, PRODUCT_SEARCH, TICKET_CREATE, TICKET_QUERY, etc.)."
+                auth_context = "\n\n[WARNING] CONTEXTO CRÍTICO DE AUTENTICACIÓN:\nEl usuario YA ESTÁ AUTENTICADO en el sistema. NO debes activar herramientas OTP_SEND o OTP_VERIFY bajo ninguna circunstancia. Procesa la consulta como una solicitud normal del usuario autenticado (puede usar RAG_SEARCH, PRODUCT_SEARCH, TICKET_CREATE, TICKET_QUERY, etc.)."
                 # Si hay session_info con email, indicar que el email está disponible automáticamente
                 if session_info and session_info.get("email"):
-                        auth_context += f"\n\n✅ INFORMACIÓN DE SESIÓN DISPONIBLE:\nEl usuario autenticado tiene email disponible automáticamente: {session_info.get('email')}. Si la consulta requiere crear un ticket (TICKET_CREATE), NO marques 'requires_additional_info' por falta de email, nombre, número de factura, número de pedido o número de ticket (todos se generan automáticamente). El sistema puede extraer cantidad, productos y dirección de la consulta. SOLO marca 'requires_additional_info: true' si falta información REALMENTE crítica que no se puede inferir ni generar automáticamente. Si el usuario menciona productos, cantidad o dirección en su consulta, esa información está disponible."
+                        auth_context += f"\n\n[OK] INFORMACIÓN DE SESIÓN DISPONIBLE:\nEl usuario autenticado tiene email disponible automáticamente: {session_info.get('email')}. Si la consulta requiere crear un ticket (TICKET_CREATE), NO marques 'requires_additional_info' por falta de email, nombre, número de factura, número de pedido o número de ticket (todos se generan automáticamente). El sistema puede extraer cantidad, productos y dirección de la consulta. SOLO marca 'requires_additional_info: true' si falta información REALMENTE crítica que no se puede inferir ni generar automáticamente. Si el usuario menciona productos, cantidad o dirección en su consulta, esa información está disponible."
                 reasoning_prompt_template = reasoning_prompt_template + auth_context
             else:
-                auth_context = "\n\n⚠️ CONTEXTO CRÍTICO DE AUTENTICACIÓN:\nEl usuario NO está autenticado. Si proporciona email/código OTP en la consulta, debes activar herramientas de autenticación (OTP_SEND o OTP_VERIFY)."
+                auth_context = "\n\n[WARNING] CONTEXTO CRÍTICO DE AUTENTICACIÓN:\nEl usuario NO está autenticado. Si proporciona email/código OTP en la consulta, debes activar herramientas de autenticación (OTP_SEND o OTP_VERIFY)."
                 reasoning_prompt_template = reasoning_prompt_template + auth_context
             prompt = ChatPromptTemplate.from_messages([
                 ("system", get_reasoning_prompt("system_context")),
@@ -173,7 +173,7 @@ class OrchestratorAgent:
                 )
                 return analysis
             except json.JSONDecodeError:
-                print("⚠️  No se pudo parsear JSON, usando heurística")
+                print("[WARNING]  No se pudo parsear JSON, usando heurística")
                 return self._simple_analysis(query, is_authenticated)
                 
         except Exception as e:

@@ -66,20 +66,20 @@ def google_login():
                                 st.session_state.google_user = user_info
                                 st.session_state.otp_sent = True
                                 
-                                st.success("✅ Código OTP enviado a tu correo electrónico")
+                                st.success("[OK] Código OTP enviado a tu correo electrónico")
                                 time.sleep(2)
                                 # Clean query params by redirecting without them
                                 st.query_params.clear()
                                 st.rerun()
                             else:
-                                st.error(f"❌ {auth_result.get('message')}")
+                                st.error(f"[ERROR] {auth_result.get('message')}")
                         else:
-                            st.error("❌ No se pudo obtener información del usuario")
+                            st.error("[ERROR] No se pudo obtener información del usuario")
                     else:
-                        st.error("❌ Error al autenticar con Google")
+                        st.error("[ERROR] Error al autenticar con Google")
                     
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+                    st.error(f"[ERROR] Error: {str(e)}")
                     st.exception(e)
         
         # OTP verification form
@@ -111,25 +111,25 @@ def google_login():
                                 "picture": st.session_state.google_user.get("picture")
                             }
                             
-                            st.success("✅ Verificación exitosa!")
+                            st.success("[OK] Verificación exitosa!")
                             st.balloons()
                             time.sleep(1)
                             st.switch_page("views/admin_panel.py")
                         else:
-                            st.error("❌ Código OTP incorrecto o expirado")
+                            st.error("[ERROR] Código OTP incorrecto o expirado")
                     else:
-                        st.warning("⚠️ Por favor ingresa un código de 6 dígitos")
+                        st.warning("[WARNING] Por favor ingresa un código de 6 dígitos")
             
             # Resend OTP
-            if st.button("🔄 Reenviar código", use_container_width=True):
+            if st.button("[RELOAD] Reenviar código", use_container_width=True):
                 if st.session_state.email:
                     from controllers.auth import send_google_otp
                     if send_google_otp(st.session_state.email):
-                        st.success("✅ Código reenviado")
+                        st.success("[OK] Código reenviado")
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error("❌ Error al reenviar código")
+                        st.error("[ERROR] Error al reenviar código")
         
         # Google OAuth button
         else:
@@ -170,7 +170,7 @@ def google_login():
             """, unsafe_allow_html=True)
             
             st.link_button(
-                "🔵 Continuar con Google",
+                "[GOOGLE] Continuar con Google",
                 auth_url,
                 use_container_width=True,
                 type="primary"

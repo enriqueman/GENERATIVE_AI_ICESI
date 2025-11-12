@@ -38,7 +38,7 @@ def admin_panel():
             st.switch_page("views/admin_login.py")
         return
     
-    st.markdown("### 🔧 Panel de Administración")
+    st.markdown("### [CONFIG] Panel de Administración")
     st.write(f"Bienvenido, **{st.session_state.user_info['username']}**")
     
     # Logout button
@@ -51,7 +51,7 @@ def admin_panel():
             st.rerun()
     
     # Tabs for different management sections
-    tab1, tab2, tab3, tab4 = st.tabs(["📚 Documentos", "📊 Estadísticas", "⚙️ Configuración", "🔍 Trazabilidad"])
+    tab1, tab2, tab3, tab4 = st.tabs(["[BOOKS] Documentos", "[DATA] Estadísticas", "[SETTINGS] Configuración", "[DEBUG] Trazabilidad"])
     
     with tab1:
         manage_documents()
@@ -127,14 +127,14 @@ def manage_documents():
                     # Remove temp file
                     os.remove(temp_file_path)
                     
-                    st.success(f"✅ Documento '{uploaded_file.name}' subido exitosamente!")
+                    st.success(f"[OK] Documento '{uploaded_file.name}' subido exitosamente!")
                     st.rerun()
                     
                 except Exception as e:
-                    st.error(f"❌ Error al procesar el documento: {str(e)}")
+                    st.error(f"[ERROR] Error al procesar el documento: {str(e)}")
     
     # List existing documents
-    st.markdown("### 📋 Documentos en el Sistema")
+    st.markdown("### [LIST] Documentos en el Sistema")
     
     # Get both regular documents and sample documents
     regular_documents = list_sources(1, source_type="document")
@@ -147,15 +147,15 @@ def manage_documents():
         
         # Show sample documents first
         if sample_documents:
-            st.markdown("#### 🌿 Documentos de Muestra (Pre-cargados)")
+            st.markdown("#### [ECOMARKET] Documentos de Muestra (Pre-cargados)")
             for doc in sample_documents:
                 doc_id = doc[0]
                 doc_name = doc[1]
                 doc_description = doc[2]
                 
-                with st.expander(f"📄 {doc_name} (Muestra)", expanded=False):
+                with st.expander(f"[DOC] {doc_name} (Muestra)", expanded=False):
                     st.write(f"**Descripción:** {doc_description if doc_description else 'Sin descripción'}")
-                    st.info("ℹ️ Este es un documento de muestra pre-cargado en el sistema")
+                    st.info("[INFO] Este es un documento de muestra pre-cargado en el sistema")
                     
                     col1, col2 = st.columns([0.8, 0.2])
                     with col2:
@@ -166,13 +166,13 @@ def manage_documents():
         
         # Show regular documents
         if regular_documents:
-            st.markdown("#### 📚 Documentos Subidos por Administrador")
+            st.markdown("#### [BOOKS] Documentos Subidos por Administrador")
             for doc in regular_documents:
                 doc_id = doc[0]
                 doc_name = doc[1]
                 doc_description = doc[2]
                 
-                with st.expander(f"📄 {doc_name}"):
+                with st.expander(f"[DOC] {doc_name}"):
                     st.write(f"**Descripción:** {doc_description if doc_description else 'Sin descripción'}")
                     
                     col1, col2 = st.columns([0.8, 0.2])
@@ -186,7 +186,7 @@ def manage_documents():
 
 def show_statistics():
     """Show system statistics"""
-    st.subheader("📊 Estadísticas del Sistema")
+    st.subheader("[DATA] Estadísticas del Sistema")
     
     conn = connect_db()
     cursor = conn.cursor()
@@ -213,21 +213,21 @@ def show_statistics():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📚 Total Documentos", doc_count)
+        st.metric("[BOOKS] Total Documentos", doc_count)
     
     with col2:
-        st.metric("🌿 Documentos Muestra", sample_doc_count)
+        st.metric("[ECOMARKET] Documentos Muestra", sample_doc_count)
     
     with col3:
         st.metric("❓ Consultas Recibidas", query_count)
     
     with col4:
-        st.metric("💬 Respuestas Generadas", response_count)
+        st.metric("[CHAT] Respuestas Generadas", response_count)
     
     st.markdown("---")
     
     # Recent queries
-    st.markdown("### 🔍 Consultas Recientes")
+    st.markdown("### [DEBUG] Consultas Recientes")
     
     conn = connect_db()
     cursor = conn.cursor()
@@ -249,9 +249,9 @@ def show_statistics():
 
 def show_settings():
     """Show system settings"""
-    st.subheader("⚙️ Configuración del Sistema")
+    st.subheader("[SETTINGS] Configuración del Sistema")
     
-    st.markdown("### 🎯 Parámetros del RAG")
+    st.markdown("### [TARGET] Parámetros del RAG")
     
     # Score threshold setting
     score_threshold = st.slider(
@@ -275,7 +275,7 @@ def show_settings():
         help="Tamaño de los fragmentos de texto para procesamiento"
     )
     
-    st.markdown("### 🔄 Mantenimiento")
+    st.markdown("### [RELOAD] Mantenimiento")
     
     col1, col2 = st.columns(2)
     
@@ -286,7 +286,7 @@ def show_settings():
             st.success("Sesiones expiradas eliminadas")
     
     with col2:
-        if st.button("📊 Exportar estadísticas"):
+        if st.button("[DATA] Exportar estadísticas"):
             st.info("Función de exportación en desarrollo")
 
 if __name__ == "__main__":

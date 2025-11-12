@@ -354,3 +354,113 @@ def get_context_for_query(session_id: str, trace_id: str = None) -> str:
         )
         return ""
 
+
+# ============================================================================
+# FUNCIONES PARA INTERVIEWER AGENT
+# ============================================================================
+
+def store_interview_data(session_id: str, key: str, value: Any, ttl_minutes: int = 30) -> bool:
+    """
+    Almacenar datos de la entrevista (TTL extendido a 30 minutos)
+    
+    Args:
+        session_id: ID de la sesión
+        key: Clave del dato (ej: "profile", "current_question", "completed")
+        value: Valor a almacenar (puede ser dict, list, str, int, bool)
+        ttl_minutes: Tiempo de vida en minutos (default: 30)
+        
+    Returns:
+        bool: True si se almacenó exitosamente
+    """
+    import json
+    
+    try:
+        # Convertir el valor a string JSON si no es string
+        if not isinstance(value, str):
+            value_str = json.dumps(value, ensure_ascii=False)
+        else:
+            value_str = value
+        
+        # Usar la función existente de memoria
+        interview_key = f"interview_{key}"
+        success = db_store_memory(session_id, interview_key, value_str, ttl_minutes)
+        
+        return success
+        
+    except Exception as e:
+        print(f"[ERROR] Error storing interview data: {e}")
+        return False
+
+
+def get_interview_data(session_id: str, key: str) -> Any:
+    """
+    Obtener datos de la entrevista
+    
+    Args:
+        session_id: ID de la sesión
+        key: Clave del dato
+        
+    Returns:
+        Valor almacenado (deserializado) o None si no existe
+    """
+    import json
+    
+    try:
+        interview_key = f"interview_{key}"
+        value_str = db_get_memory(session_id, interview_key)
+        
+        if not value_str:
+            return None
+        
+        # Intentar parsear como JSON
+        try:
+            return json.loads(value_str)
+        except json.JSONDecodeError:
+            # Si no es JSON, retornar el string directamente
+            return value_str
+            
+    except Exception as e:
+        print(f"[ERROR] Error getting interview data: {e}")
+        return None
+
+
+def clear_interview_data(session_id: str) -> bool:
+    """
+    Limpiar todos los datos de la entrevista
+    
+    Args:
+        session_id: ID de la sesión
+        
+    Returns:
+        bool: True si se limpió exitosamente
+    """
+    try:
+        # Limpiar las claves principales de la entrevista
+        keys_to_clear = [
+            "interview_profile",
+            "interview_current_question",
+            "interview_completed"
+        ]
+        
+        for key in keys_to_clear:
+            db_delete_memory(session_id, key)
+        
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] Error clearing interview data: {e}")
+        return False
+
+
+def check_interview_complete(session_id: str) -> bool:
+    """
+    Verificar si la entrevista está completa
+    
+    Args:
+        session_id: ID de la sesión
+        
+    Returns:
+        bool: True si está completa
+    """
+    completed = get_interview_data(session_id, "completed")
+    return completed if completed is not None else False

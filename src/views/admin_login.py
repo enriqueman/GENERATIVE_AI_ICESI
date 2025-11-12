@@ -35,19 +35,19 @@ def admin_login():
                         st.session_state.session_token = session_token
                         st.session_state.user_info = user_info
                         
-                        st.success("✅ Login exitoso!")
+                        st.success("[OK] Login exitoso!")
                         st.balloons()
                         time.sleep(1)
                         st.switch_page("views/admin_panel.py")
                     else:
-                        st.error("❌ Usuario o contraseña incorrectos")
+                        st.error("[ERROR] Usuario o contraseña incorrectos")
                 else:
-                    st.warning("⚠️ Por favor ingresa usuario y contraseña")
+                    st.warning("[WARNING] Por favor ingresa usuario y contraseña")
         
         st.markdown("---")
         
         # Google Login button
-        if st.button("🔵 Continuar con Google", use_container_width=True, type="secondary"):
+        if st.button("[GOOGLE] Continuar con Google", use_container_width=True, type="secondary"):
             st.switch_page("views/google_login.py")
         
         st.markdown("---")

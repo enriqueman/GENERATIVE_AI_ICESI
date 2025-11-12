@@ -41,8 +41,8 @@ class TracingLogger:
                 langsmith_tracing = os.getenv("LANGSMITH_TRACING", "false")
                 langchain_tracing_v2 = os.getenv("LANGCHAIN_TRACING_V2", "false")
                 
-                print(f"🔍 DEBUG: LANGSMITH_TRACING={langsmith_tracing}")
-                print(f"🔍 DEBUG: LANGCHAIN_TRACING_V2={langchain_tracing_v2}")
+                print(f"[DEBUG] LANGSMITH_TRACING={langsmith_tracing}")
+                print(f"[DEBUG] LANGCHAIN_TRACING_V2={langchain_tracing_v2}")
                 
                 tracing_enabled = (
                     langsmith_tracing.lower() == "true" or
@@ -50,11 +50,11 @@ class TracingLogger:
                 )
                 
                 if tracing_enabled:
-                    print(f"✅ Tracing habilitado")
+                    print(f"[OK] Tracing habilitado")
                     api_key = os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGCHAIN_API_KEY")
                     api_url = os.getenv("LANGSMITH_ENDPOINT") or os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
                     
-                    print(f"🔍 DEBUG: API Key presente: {bool(api_key)}")
+                    print(f"[DEBUG] API Key presente: {bool(api_key)}")
                     
                     if api_key:
                         # Configurar variables de entorno para LangChain
@@ -64,11 +64,11 @@ class TracingLogger:
                         os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "ecomarket-rag-system")
                         
                         self.client = Client(api_key=api_key, api_url=api_url)
-                        print("✅ LangSmith tracing habilitado")
+                        print("[OK] LangSmith tracing habilitado")
                 else:
-                    print("ℹ️  LangSmith tracing deshabilitado (LANGSMITH_TRACING=false)")
+                    print("[INFO] LangSmith tracing deshabilitado (LANGSMITH_TRACING=false)")
             except Exception as e:
-                print(f"⚠️  No se pudo configurar LangSmith: {e}")
+                print(f"[WARNING] No se pudo configurar LangSmith: {e}")
     
     def generate_trace_id(self) -> str:
         """Generar un nuevo trace ID único"""

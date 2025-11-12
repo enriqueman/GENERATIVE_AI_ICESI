@@ -12,20 +12,20 @@ def setup():
     """Initialize the system"""
     
     print("=" * 60)
-    print("🌿 ECOMARKET RAG SYSTEM - CONFIGURACIÓN INICIAL")
+    print("[ECOMARKET] ECOMARKET RAG SYSTEM - CONFIGURACIÓN INICIAL")
     print("=" * 60)
     print()
     
     # Create directories
-    print("📁 Creando directorios necesarios...")
+    print("[DIR] Creando directorios necesarios...")
     os.makedirs("persist", exist_ok=True)
     os.makedirs("temp_files", exist_ok=True)
     os.makedirs("pages", exist_ok=True)
-    print("✅ Directorios creados")
+    print("[OK] Directorios creados")
     print()
     
     # Initialize database
-    print("🗄️  Inicializando base de datos...")
+    print("[DB]  Inicializando base de datos...")
     init_database()
     
     # Small delay to ensure database is ready
@@ -33,17 +33,17 @@ def setup():
     time.sleep(0.5)
     
     # Create admin table with retry logic
-    print("👤 Creando tablas de administración...")
+    print("[USER] Creando tablas de administración...")
     if create_admin_table():
-        print("✅ Tablas de administración creadas")
+        print("[OK] Tablas de administración creadas")
     else:
-        print("⚠️  Error creando tablas de administración")
+        print("[WARNING]  Error creando tablas de administración")
     
-    print("✅ Base de datos inicializada")
+    print("[OK] Base de datos inicializada")
     print()
     
     # Create admin user
-    print("👤 Configuración de usuario administrador")
+    print("[USER] Configuración de usuario administrador")
     print("-" * 60)
     
     default_username = "admin"
@@ -73,7 +73,7 @@ def setup():
                 email = input("Email: ").strip()
                 
                 if not username or not password:
-                    print("❌ Usuario y contraseña son obligatorios")
+                    print("[ERROR] Usuario y contraseña son obligatorios")
                     return
             else:
                 username = default_username
@@ -90,36 +90,36 @@ def setup():
     time.sleep(0.5)
     
     # Create admin user
-    print("👤 Creando usuario administrador...")
+    print("[USER] Creando usuario administrador...")
     if create_admin_user(username, password, email):
         print()
-        print("✅ Usuario administrador creado exitosamente!")
+        print("[OK] Usuario administrador creado exitosamente!")
         print()
         print("=" * 60)
-        print("📋 CREDENCIALES DE ACCESO")
+        print("[LIST] CREDENCIALES DE ACCESO")
         print("=" * 60)
         print(f"Usuario: {username}")
         print(f"Contraseña: {password}")
         print(f"Email: {email}")
         print("=" * 60)
         print()
-        print("⚠️  IMPORTANTE: Guarda estas credenciales en un lugar seguro")
+        print("[WARNING]  IMPORTANTE: Guarda estas credenciales en un lugar seguro")
         print()
     else:
-        print("ℹ️  El usuario ya existe o hubo un error en la creación")
+        print("[INFO]  El usuario ya existe o hubo un error en la creación")
         print()
     
     # Initialize sample documents collection
-    print("📚 Inicializando colección de documentos de muestra...")
+    print("[BOOKS] Inicializando colección de documentos de muestra...")
     if initialize_sample_collection():
-        print("✅ Documentos de muestra cargados exitosamente!")
+        print("[OK] Documentos de muestra cargados exitosamente!")
     else:
-        print("⚠️  No se pudieron cargar los documentos de muestra")
+        print("[WARNING]  No se pudieron cargar los documentos de muestra")
     print()
     
     # Instructions
     print("=" * 60)
-    print("🚀 SIGUIENTE PASO")
+    print("[START] SIGUIENTE PASO")
     print("=" * 60)
     print()
     print("Para iniciar la aplicación, ejecuta:")

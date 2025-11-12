@@ -370,9 +370,9 @@ class EcoMarketAgent:
             precio = result.get('precio', 'N/A')
             
             response = f"""
-✅ **Producto Encontrado:**
+[OK] **Producto Encontrado:**
 
-📦 **{nombre}**
+[PACKAGE] **{nombre}**
 - Categoría: {categoria}
 - Cantidad en Stock: {cantidad} unidades
 - Precio: ${precio}
@@ -382,14 +382,14 @@ class EcoMarketAgent:
             
             # Agregar matches alternativos si existen
             if result.get('matches_alternativos'):
-                response += "\n\n📋 **Productos alternativos similares:**\n"
+                response += "\n\n[LIST] **Productos alternativos similares:**\n"
                 for alt in result['matches_alternativos'][:3]:  # Máximo 3 alternativas
                     response += f"- {alt['producto_nombre']} (Categoría: {alt['categoria']}, Precio: ${alt['precio']})\n"
             
             return response
         else:
             return f"""
-❌ **Producto no encontrado**
+[ERROR] **Producto no encontrado**
 
 No encontramos el producto que buscas en nuestro inventario.
 
@@ -397,7 +397,7 @@ No encontramos el producto que buscas en nuestro inventario.
 - Otro nombre o descripción
 - Buscar por categoría
 - O contactarnos directamente:
-  📧 soporte@ecomarket.com
+  [EMAIL] soporte@ecomarket.com
   📞 +57 324 456 4450
 """
     
@@ -409,7 +409,7 @@ No encontramos el producto que buscas en nuestro inventario.
         
         if total_encontrados == 0:
             return """
-❌ **No se encontraron productos**
+[ERROR] **No se encontraron productos**
 
 No se encontraron productos en nuestro inventario.
 
@@ -417,7 +417,7 @@ No se encontraron productos en nuestro inventario.
 """
         
         response = f"""
-📋 **Resultados de Búsqueda:**
+[LIST] **Resultados de Búsqueda:**
 
 Encontrados {total_encontrados} de {total_buscados} productos buscados:
 
@@ -425,13 +425,13 @@ Encontrados {total_encontrados} de {total_buscados} productos buscados:
         for idx, producto in enumerate(resultados, 1):
             if producto.get('existe'):
                 det = producto.get('detalles_match', {})
-                response += f"{idx}. ✅ **{producto.get('producto_ingresado')}**\n"
+                response += f"{idx}. [OK] **{producto.get('producto_ingresado')}**\n"
                 response += f"   → {det.get('producto_nombre', 'Producto encontrado')}\n"
                 response += f"   - Categoría: {det.get('categoria', 'N/A')}\n"
                 response += f"   - Stock: {det.get('cantidad', 'N/A')}\n"
                 response += f"   - Precio: ${det.get('precio', 'N/A')}\n\n"
             else:
-                response += f"{idx}. ❌ **{producto.get('producto_ingresado')}** (No encontrado)\n\n"
+                response += f"{idx}. [ERROR] **{producto.get('producto_ingresado')}** (No encontrado)\n\n"
         
         return response
     
@@ -443,13 +443,13 @@ Encontrados {total_encontrados} de {total_buscados} productos buscados:
         
         if total == 0:
             return f"""
-❌ **No se encontraron productos**
+[ERROR] **No se encontraron productos**
 
 No hay productos en la categoría '{categoria}' actualmente disponibles.
 """
         
         response = f"""
-📦 **Productos en categoría: {categoria}**
+[PACKAGE] **Productos en categoría: {categoria}**
 
 Encontrados {total} productos:
 
@@ -468,13 +468,13 @@ Encontrados {total} productos:
         
         if total == 0:
             return """
-❌ **No se encontraron categorías**
+[ERROR] **No se encontraron categorías**
 
 No hay categorías disponibles en nuestro inventario actual.
 """
         
         response = """
-📦 **Categorías Disponibles:**
+[PACKAGE] **Categorías Disponibles:**
 
 Tienes {total} categorías de productos:
 
@@ -485,7 +485,7 @@ Tienes {total} categorías de productos:
             cat_count = cat.get('cantidad_productos', 0)
             response += f"{idx}. **{cat_name}** ({cat_count} productos)\n"
         
-        response += "\n💡 *Pregúntame por productos de una categoría específica para ver más detalles*"
+        response += "\n[IDEA] *Pregúntame por productos de una categoría específica para ver más detalles*"
         
         return response
     
@@ -496,13 +496,13 @@ Tienes {total} categorías de productos:
         
         if total == 0:
             return """
-❌ **No se encontraron productos**
+[ERROR] **No se encontraron productos**
 
 No hay productos disponibles en nuestro inventario actual.
 """
         
         response = f"""
-📦 **Catálogo Completo - {total} Productos Disponibles**
+[PACKAGE] **Catálogo Completo - {total} Productos Disponibles**
 
 """
         
@@ -528,7 +528,7 @@ No hay productos disponibles en nuestro inventario actual.
                 response += f"- Stock: {cantidad} unidades\n"
                 response += f"- Precio: ${precio}\n\n"
         
-        response += "\n💡 *¿Te interesa algún producto en particular? Pregúntame por más detalles*"
+        response += "\n[IDEA] *¿Te interesa algún producto en particular? Pregúntame por más detalles*"
         
         return response
     
@@ -685,7 +685,7 @@ No hay productos disponibles en nuestro inventario actual.
             # Validar que tenemos email (debe venir de session_info si está autenticado)
             if not cliente_info.get('email'):
                 return """
-🔄 **Solicitud de Devolución**
+[RELOAD] **Solicitud de Devolución**
 
 Para crear un ticket de devolución, necesito:
 - El producto que deseas devolver
@@ -759,9 +759,9 @@ Por favor, proporciona esta información para procesar tu solicitud.
             
             if ticket_result and ticket_result.get('ticket_number'):
                 return f"""
-✅ **Ticket de devolución creado exitosamente**
+[OK] **Ticket de devolución creado exitosamente**
 
-📋 **Detalles del ticket:**
+[LIST] **Detalles del ticket:**
 - **Número de ticket**: {ticket_result['ticket_number']}
 - **Número de factura**: {factura_numero}
 - **Producto**: {producto_id}
@@ -800,7 +800,7 @@ Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto.
                 # Validar que tenemos email (debe venir de session_info si está autenticado)
                 if not cliente_info.get('email'):
                     return """
-📦 **Crear Guía de Seguimiento**
+[PACKAGE] **Crear Guía de Seguimiento**
 
 Para crear una guía de seguimiento, necesito:
 - Número de pedido (opcional)
@@ -1023,9 +1023,9 @@ Por favor, proporciona esta información para procesar tu solicitud.
             
             if ticket_result and ticket_result.get('ticket_number'):
                 return f"""
-✅ **Ticket de compra creado exitosamente**
+[OK] **Ticket de compra creado exitosamente**
 
-📋 **Detalles del ticket:**
+[LIST] **Detalles del ticket:**
 - **Número de ticket**: {ticket_result['ticket_number']}
 - **Número de factura**: {factura_numero}
 - **Productos**: {productos_text}
@@ -1068,7 +1068,7 @@ Si necesitas información sobre productos disponibles, pregúntame por ellos.
             # Validar que tenemos email (debe venir de session_info si está autenticado)
             if not cliente_info.get('email'):
                 return """
-📝 **Queja, Reclamo o Felicitación**
+[NOTE] **Queja, Reclamo o Felicitación**
 
 Para crear un ticket, necesito:
 - Los detalles de tu caso
@@ -1099,9 +1099,9 @@ Por favor, proporciona los detalles para procesar tu solicitud.
             
             if ticket_result and ticket_result.get('ticket_number'):
                 return f"""
-✅ **Ticket de {tipo} creado exitosamente**
+[OK] **Ticket de {tipo} creado exitosamente**
 
-📋 **Detalles del ticket:**
+[LIST] **Detalles del ticket:**
 - **Número de ticket**: {ticket_result['ticket_number']}
 - **Tipo**: {tipo.capitalize()}
 - **Estado**: Abierto
@@ -1174,7 +1174,7 @@ Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto.
                 )
             else:
                 return """
-🔍 **Consulta de Ticket**
+[DEBUG] **Consulta de Ticket**
 
 Para consultar tus tickets, necesito:
 - Tu número de ticket, O
@@ -1187,7 +1187,7 @@ Ejemplos:
             
             if not result.get('exito'):
                 return f"""
-❌ **No se encontraron tickets**
+[ERROR] **No se encontraron tickets**
 
 {result.get('mensaje', 'No se encontraron tickets')}
 
@@ -1205,7 +1205,7 @@ Por favor, verifica:
             
             # Construir respuesta formateada
             response = f"""
-📋 **Consulta de Tickets**
+[LIST] **Consulta de Tickets**
 
 Se encontraron {total} ticket(s):
 
@@ -1297,15 +1297,15 @@ Se encontraron {total} ticket(s):
     def _get_ticket_help_response(self) -> str:
         """Respuesta de ayuda para tickets"""
         return """
-📋 **Atención al Cliente**
+[LIST] **Atención al Cliente**
 
 Puedo ayudarte con:
-- ✅ Devoluciones de productos
-- ✅ Consulta de seguimiento de pedidos
-- ✅ Obtención de facturas
-- ✅ Quejas, reclamos y felicitaciones
-- ✅ Gestión de compras
-- ✅ Consultar estado de tus tickets
+- [OK] Devoluciones de productos
+- [OK] Consulta de seguimiento de pedidos
+- [OK] Obtención de facturas
+- [OK] Quejas, reclamos y felicitaciones
+- [OK] Gestión de compras
+- [OK] Consultar estado de tus tickets
 
 ¿En qué puedo asistirte hoy?
 """
@@ -1316,9 +1316,9 @@ Puedo ayudarte con:
         🙏 Disculpa, actualmente estamos configurando nuestro sistema de respuestas automáticas.
         
         Por favor, contacta directamente con nuestro equipo de soporte:
-        - 📧 Email: soporte@ecomarket.com
+        - [EMAIL] Email: soporte@ecomarket.com
         - 📞 Teléfono: +57 324 456 4450
-        - ⏰ Horario: Lunes a Viernes 9:00 AM - 6:00 PM
+        - [TIME] Horario: Lunes a Viernes 9:00 AM - 6:00 PM
         """
     
     def _get_error_response(self, error_msg: str) -> str:
@@ -1327,7 +1327,7 @@ Puedo ayudarte con:
         😔 Lo siento, tuve un problema al procesar tu consulta.
         
         Por favor, intenta nuevamente o contacta a nuestro equipo:
-        - 📧 soporte@ecomarket.com
+        - [EMAIL] soporte@ecomarket.com
         - 📞 +57 324 456 4450
         """
     

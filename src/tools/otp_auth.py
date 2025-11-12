@@ -129,7 +129,7 @@ def verify_otp_code(email: str, otp_code: str, trace_id: str = None) -> dict:
             )
             return {
                 "success": False,
-                "message": "❌ Código OTP incorrecto o expirado. Por favor verifica el código e intenta nuevamente."
+                "message": "[ERROR] Código OTP incorrecto o expirado. Por favor verifica el código e intenta nuevamente."
             }
         
         # Get user
@@ -164,7 +164,7 @@ def verify_otp_code(email: str, otp_code: str, trace_id: str = None) -> dict:
         
         return {
             "success": True,
-            "message": f"✅ ¡Autenticación exitosa! Hola {display_name}, ya puedes usar todas las funcionalidades del chat. ¿En qué puedo ayudarte hoy?",
+            "message": f"[OK] ¡Autenticación exitosa! Bienvenido/a {display_name} al Sistema de Recomendación de Posgrados de la Universidad ICESI.\n\nVoy a hacerte algunas preguntas para conocerte mejor y recomendarte los programas de posgrado más adecuados para tu perfil profesional.\n\n¿Estás listo/a para comenzar? Escribe 'sí' o 'empezar' para iniciar la entrevista.",
             "session_token": session_token,
             "user": user
         }

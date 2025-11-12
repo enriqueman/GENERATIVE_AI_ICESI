@@ -10,14 +10,14 @@ import pandas as pd
 
 def display_tracing_panel():
     """Mostrar el panel de trazabilidad"""
-    st.header("📊 Panel de Trazabilidad")
+    st.header("[DATA] Panel de Trazabilidad")
     st.markdown("Monitoreo en tiempo real de las operaciones del sistema RAG")
     
     # Obtener estadísticas
     stats = get_statistics()
     
     if not stats or stats.get("total_logs", 0) == 0:
-        st.info("📝 No hay logs registrados aún. El sistema comenzará a registrar actividad cuando se realicen consultas.")
+        st.info("[NOTE] No hay logs registrados aún. El sistema comenzará a registrar actividad cuando se realicen consultas.")
         return
     
     # Mostrar estadísticas generales
@@ -40,7 +40,7 @@ def display_tracing_panel():
     # Métricas de traces
     unique_traces = stats.get("unique_traces", 0)
     if unique_traces > 0:
-        st.info(f"🔄 {unique_traces} interacciones únicas trazadas")
+        st.info(f"[RELOAD] {unique_traces} interacciones únicas trazadas")
     
     st.divider()
     
@@ -90,10 +90,10 @@ def display_tracing_panel():
                 formatted_time = timestamp
             
             table_data.append({
-                "⏰ Hora": formatted_time,
-                "🔧 Operación": log.get("operation", "Unknown"),
-                "📝 Mensaje": log.get("message", ""),
-                "📊 Nivel": log.get("level", "INFO"),
+                "[TIME] Hora": formatted_time,
+                "[CONFIG] Operación": log.get("operation", "Unknown"),
+                "[NOTE] Mensaje": log.get("message", ""),
+                "[DATA] Nivel": log.get("level", "INFO"),
             })
         
         df = pd.DataFrame(table_data)
@@ -108,7 +108,7 @@ def display_tracing_panel():
                 return "background-color: #e0f0ff"
             return ""
         
-        styled_df = df.style.apply(lambda x: x.map(color_level), subset=["📊 Nivel"])
+        styled_df = df.style.apply(lambda x: x.map(color_level), subset=["[DATA] Nivel"])
         st.dataframe(
             styled_df,
             use_container_width=True,
@@ -121,7 +121,7 @@ def display_tracing_panel():
     st.divider()
     
     # Mostrar últimos logs en detalle
-    st.subheader("📋 Detalles de los Últimos 10 Logs")
+    st.subheader("[LIST] Detalles de los Últimos 10 Logs")
     
     for log in filtered_logs[:10]:
         with st.expander(f"[{log.get('level')}] {log.get('operation')}: {log.get('message', '')[:80]}"):
@@ -152,7 +152,7 @@ def display_tracing_panel():
     # Botón para limpiar logs
     if st.button("🗑️ Limpiar todos los logs", type="secondary"):
         tracer.clear_logs()
-        st.success("✅ Logs limpiados")
+        st.success("[OK] Logs limpiados")
         st.rerun()
     
     # Mostrar distribución por operación
@@ -193,7 +193,7 @@ def display_tracing_panel():
     
     # Mostrar Traces Agrupados
     st.divider()
-    st.subheader("🔄 Traces de Interacciones (Agrupados)")
+    st.subheader("[RELOAD] Traces de Interacciones (Agrupados)")
     
     # Extraer todos los trace_ids únicos
     all_logs_with_trace = [log for log in all_logs if log.get("trace_id")]
@@ -210,7 +210,7 @@ def display_tracing_panel():
             trace_logs = get_trace_logs(selected_trace)
             
             st.markdown(f"**📌 Trace ID:** `{selected_trace}`")
-            st.markdown(f"**📊 Total de operaciones:** {len(trace_logs)}")
+            st.markdown(f"**[DATA] Total de operaciones:** {len(trace_logs)}")
             
             # Mostrar timeline del trace
             st.markdown("**⏱️ Timeline de operaciones:**")
@@ -223,15 +223,15 @@ def display_tracing_panel():
                 
                 # Color según nivel
                 if level == "ERROR":
-                    st.error(f"**{i}. {operation}** ❌ - {message}")
+                    st.error(f"**{i}. {operation}** [ERROR] - {message}")
                 elif level == "SUCCESS":
-                    st.success(f"**{i}. {operation}** ✅ - {message}")
+                    st.success(f"**{i}. {operation}** [OK] - {message}")
                 else:
-                    st.info(f"**{i}. {operation}** ℹ️ - {message}")
+                    st.info(f"**{i}. {operation}** [INFO] - {message}")
                 
                 # Mostrar metadata si existe
                 if metadata:
-                    with st.expander("📊 Ver metadata"):
+                    with st.expander("[DATA] Ver metadata"):
                         st.json(metadata)
                 
                 st.markdown("---")

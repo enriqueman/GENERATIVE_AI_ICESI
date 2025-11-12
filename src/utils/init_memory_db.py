@@ -44,9 +44,9 @@ def init_memory_table():
             """)
             
             conn.commit()
-            print("✅ Tabla chat_memory creada exitosamente")
+            print("[OK] Tabla chat_memory creada exitosamente")
         else:
-            print("✅ Tabla chat_memory ya existe")
+            print("[OK] Tabla chat_memory ya existe")
         
         # Clean up expired memories
         cursor.execute("DELETE FROM chat_memory WHERE expires_at < datetime('now')")
@@ -57,7 +57,7 @@ def init_memory_table():
         conn.commit()
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         if conn:
             conn.rollback()
     finally:

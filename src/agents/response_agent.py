@@ -44,7 +44,7 @@ class ResponseAgent:
     def _initialize(self):
         """Inicializar el LLM para respuestas"""
         if not LLM_AVAILABLE:
-            print("⚠️  LLM no disponible para respuestas")
+            print("[WARNING]  LLM no disponible para respuestas")
             return
         
         try:
@@ -56,9 +56,9 @@ class ResponseAgent:
                 api_key=env("OPENAI_API_KEY"),
                 temperature=0.7  # Temperatura media-alta para respuestas más naturales y amigables
             )
-            print("✅ Response Agent inicializado")
+            print("[OK] Response Agent inicializado")
         except Exception as e:
-            print(f"⚠️  Error inicializando LLM para respuestas: {e}")
+            print(f"[WARNING]  Error inicializando LLM para respuestas: {e}")
             self.llm_response = None
     
     @traceable(name="ResponseAgent.generate_response")
@@ -145,7 +145,7 @@ class ResponseAgent:
     
     def _format_tool_results(self, results: dict) -> str:
         """Formatear resultados de herramientas para el prompt"""
-        formatted = "📊 INFORMACIÓN RECUPERADA:\n\n"
+        formatted = "[DATA] INFORMACIÓN RECUPERADA:\n\n"
         
         for tool, data in results.get("data", {}).items():
             formatted += f"**{tool}:**\n"
@@ -192,7 +192,7 @@ class ResponseAgent:
                 response += data + "\n\n"
         
         if not response:
-            response = "Hola! 🌿 Lo siento, no pude procesar tu solicitud en este momento. Por favor, intenta de nuevo o contáctanos directamente."
+            response = "Hola! [ECOMARKET] Lo siento, no pude procesar tu solicitud en este momento. Por favor, intenta de nuevo o contáctanos directamente."
         
         return response
     
@@ -208,14 +208,14 @@ class ResponseAgent:
             str: Mensaje solicitando información
         """
         response = f"""
-¡Hola! 👋 Para ayudarte con '{intent}', necesito un poco más de información:
+¡Hola! [HELLO] Para ayudarte con '{intent}', necesito un poco más de información:
 
 """
         
         for info in missing_info:
-            response += f"📋 {info}\n"
+            response += f"[LIST] {info}\n"
         
-        response += "\nPor favor, proporciona esta información y estaré encantada de ayudarte. 🌿"
+        response += "\nPor favor, proporciona esta información y estaré encantada de ayudarte. [ECOMARKET]"
         
         return response
 

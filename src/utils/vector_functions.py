@@ -41,8 +41,10 @@ except ImportError:
     get_rag_prompt_template = None
 
 env = environ.Env()
-# reading .env file
-environ.Env.read_env()
+# reading .env file from project root
+import pathlib
+env_path = pathlib.Path(__file__).resolve().parent.parent.parent / '.env'
+environ.Env.read_env(str(env_path))
 
 def get_base_dir():
     """Obtener el directorio base del proyecto (dos niveles arriba desde src/utils/)"""
@@ -69,11 +71,11 @@ def _configure_langsmith_tracing():
             os.environ["LANGCHAIN_ENDPOINT"] = api_url
             os.environ["LANGCHAIN_API_KEY"] = api_key
             os.environ["LANGCHAIN_PROJECT"] = project_name
-            print(f"✅ LangSmith tracing configurado - Proyecto: {project_name}")
+            print(f"[OK] LangSmith tracing configurado - Proyecto: {project_name}")
         else:
-            print("⚠️  LangSmith tracing habilitado pero no se encontró API_KEY")
+            print("[WARNING] LangSmith tracing habilitado pero no se encontro API_KEY")
     else:
-        print("ℹ️  LangSmith tracing deshabilitado")
+        print("[INFO] LangSmith tracing deshabilitado")
 
 # Configurar tracing antes de inicializar modelos
 _configure_langsmith_tracing()
@@ -254,12 +256,12 @@ def load_excel_with_pandas(file_path: str) -> list[Document]:
             
             documents.append(document)
         
-        print(f"✅ Loaded {len(documents)} products from Excel file")
+        print(f"[OK] Loaded {len(documents)} products from Excel file")
         
         return documents
         
     except Exception as e:
-        print(f"❌ Error loading Excel file with pandas: {e}")
+        print(f"[ERROR] Error loading Excel file with pandas: {e}")
         import traceback
         traceback.print_exc()
         return []
@@ -282,7 +284,7 @@ def load_document(file_path: str) -> list[Document]:
     _, file_extension = os.path.splitext(file_path)
 
     if file_extension == ".txt":
-        loader = TextLoader(file_path)
+        loader = TextLoader(file_path, encoding='utf-8')
         return loader.load()
     elif file_extension == ".pdf":
         loader = PyPDFLoader(file_path)
@@ -333,7 +335,7 @@ def create_collection(collection_name, documents):
         if file_type == 'excel' and 'row_index' in doc.metadata:
             # This is already a product-level chunk, don't split further
             all_texts.append(doc)
-            print(f"📦 Product chunk (already chunked at product level)")
+            print(f"[PACKAGE] Product chunk (already chunked at product level)")
         else:
             # Create optimal splitter for this document
             optimal_splitter = create_optimal_splitter(file_type, content)
@@ -342,7 +344,7 @@ def create_collection(collection_name, documents):
             doc_texts = optimal_splitter.split_documents([doc])
             all_texts.extend(doc_texts)
             
-            print(f"📄 Split {doc.metadata.get('source', 'unknown')} into {len(doc_texts)} chunks (type: {file_type})")
+            print(f"[DOC] Split {doc.metadata.get('source', 'unknown')} into {len(doc_texts)} chunks (type: {file_type})")
     
     # Filter complex metadata
     texts = filter_complex_metadata(all_texts)
@@ -449,14 +451,14 @@ def generate_answer_from_context(retriever, question: str, enable_logging: bool 
     # Log retrieved documents if logging is enabled
     retrieved_docs = []
     if enable_logging:
-        print(f"🔍 RAG LOGGING - Pregunta: {question}")
+        print(f"[DEBUG] RAG LOGGING - Pregunta: {question}")
         try:
             retrieved_docs = retriever.get_relevant_documents(question)
-            print(f"📊 Documentos recuperados: {len(retrieved_docs)}")
+            print(f"[DATA] Documentos recuperados: {len(retrieved_docs)}")
             for i, doc in enumerate(retrieved_docs):
-                print(f"  📄 Doc {i+1}: {doc.metadata.get('source', 'Unknown')} - {doc.page_content[:100]}...")
+                print(f"  [DOC] Doc {i+1}: {doc.metadata.get('source', 'Unknown')} - {doc.page_content[:100]}...")
         except Exception as e:
-            print(f"❌ Error recuperando documentos: {e}")
+            print(f"[ERROR] Error recuperando documentos: {e}")
     
     # Log retrieval para trazabilidad
     if retrieved_docs:
@@ -472,7 +474,7 @@ def generate_answer_from_context(retriever, question: str, enable_logging: bool 
     
     # Log response if logging is enabled
     if enable_logging:
-        print(f"🤖 Respuesta generada: {response}")
+        print(f"[AI] Respuesta generada: {response}")
     
     # Log generation para trazabilidad
     processing_time = time.time() - start_time
@@ -503,12 +505,12 @@ def add_documents_to_collection(vectordb, documents):
         if file_type == 'excel' and 'row_index' in doc.metadata:
             # This is already a product-level chunk, don't split further
             all_texts.append(doc)
-            print(f"📦 Adding product chunk (already chunked at product level)")
+            print(f"[PACKAGE] Adding product chunk (already chunked at product level)")
         else:
             # Split the document into smaller text chunks
             doc_texts = text_splitter.split_documents([doc])
             all_texts.extend(doc_texts)
-            print(f"📄 Split document into {len(doc_texts)} chunks")
+            print(f"[DOC] Split document into {len(doc_texts)} chunks")
     
     # Filter complex metadata
     texts = filter_complex_metadata(all_texts)
@@ -532,27 +534,27 @@ def load_sample_documents():
     collection_name = "sample_documents"
     
     if not os.path.exists(sample_dir):
-        print(f"❌ Directory {sample_dir} not found")
+        print(f"[ERROR] Directory {sample_dir} not found")
         return [], collection_name
     
     # Get all supported file types
     supported_extensions = [".txt", ".pdf", ".docx", ".csv", ".html", ".md", ".xlsx", ".xls"]
     all_documents = []
     
-    print(f"📁 Loading sample documents from {sample_dir}...")
+    print(f"[DIR] Loading sample documents from {sample_dir}...")
     
     # List all files in the directory for debugging
     all_files = os.listdir(sample_dir)
-    print(f"📋 Files found in directory: {all_files}")
+    print(f"[LIST] Files found in directory: {all_files}")
     
     for ext in supported_extensions:
         pattern = os.path.join(sample_dir, f"*{ext}")
         files = glob.glob(pattern)
-        print(f"🔍 Looking for {ext} files: found {len(files)} files")
+        print(f"[DEBUG] Looking for {ext} files: found {len(files)} files")
         
         for file_path in files:
             try:
-                print(f"  📄 Loading: {os.path.basename(file_path)}")
+                print(f"  [DOC] Loading: {os.path.basename(file_path)}")
                 documents = load_document(file_path)
                 
                 # For Excel files, add metadata to help with retrieval
@@ -562,7 +564,7 @@ def load_sample_documents():
                         doc.metadata["file_type"] = "excel"
                 
                 all_documents.extend(documents)
-                print(f"    ✅ Loaded {len(documents)} document(s)")
+                print(f"    [OK] Loaded {len(documents)} document(s)")
                 
                 # Debug: Print first few characters of each document
                 for i, doc in enumerate(documents[:2]):  # Only first 2 docs
@@ -570,10 +572,10 @@ def load_sample_documents():
                     print(f"      Preview {i+1}: {content_preview}...")
                     
             except Exception as e:
-                print(f"    ❌ Error loading {os.path.basename(file_path)}: {str(e)}")
+                print(f"    [ERROR] Error loading {os.path.basename(file_path)}: {str(e)}")
                 traceback.print_exc()
     
-    print(f"📊 Total sample documents loaded: {len(all_documents)}")
+    print(f"[DATA] Total sample documents loaded: {len(all_documents)}")
     return all_documents, collection_name
 
 
@@ -614,26 +616,26 @@ def initialize_sample_collection():
     try:
         # Check if already initialized
         if is_sample_collection_initialized():
-            print("✅ Sample collection already initialized")
+            print("[OK] Sample collection already initialized")
             return True
         
-        print("🔄 Starting sample collection initialization...")
+        print("[RELOAD] Starting sample collection initialization...")
         
         # Check if sample documents directory exists
         base_dir = get_base_dir()
         sample_dir = os.path.join(base_dir, "static/sample_documents")
         if not os.path.exists(sample_dir):
-            print(f"❌ Sample documents directory not found: {sample_dir}")
+            print(f"[ERROR] Sample documents directory not found: {sample_dir}")
             return False
         
         # Load sample documents
         documents, collection_name = load_sample_documents()
         
         if not documents:
-            print("⚠️  No sample documents found to load")
+            print("[WARNING]  No sample documents found to load")
             return False
         
-        print(f"📊 Loaded {len(documents)} documents from sample files")
+        print(f"[DATA] Loaded {len(documents)} documents from sample files")
         
         # Create/update the collection
         base_dir = get_base_dir()
@@ -641,12 +643,12 @@ def initialize_sample_collection():
         os.makedirs(persist_directory, exist_ok=True)
         
         # Create new collection
-        print(f"📝 Creating collection: {collection_name}")
+        print(f"[NOTE] Creating collection: {collection_name}")
         vectordb = create_collection(collection_name, documents)
         if not vectordb:
-            print("❌ Failed to create sample documents collection")
+            print("[ERROR] Failed to create sample documents collection")
             return False
-        print(f"✅ Sample documents collection created successfully with {len(documents)} documents")
+        print(f"[OK] Sample documents collection created successfully with {len(documents)} documents")
         
         # Register documents in database
         register_sample_documents_in_db()
@@ -654,14 +656,14 @@ def initialize_sample_collection():
         # Test the collection
         try:
             test_retriever = load_retriever(collection_name)
-            print("✅ Collection test successful - retriever created")
+            print("[OK] Collection test successful - retriever created")
         except Exception as e:
-            print(f"⚠️  Collection test failed: {e}")
+            print(f"[WARNING]  Collection test failed: {e}")
         
         return True
                 
     except Exception as e:
-        print(f"❌ Error initializing sample collection: {str(e)}")
+        print(f"[ERROR] Error initializing sample collection: {str(e)}")
         traceback.print_exc()
         return False
 
@@ -675,7 +677,7 @@ def register_sample_documents_in_db():
         from models.db import create_source, connect_db
     except ImportError:
         # Si no se puede importar, retornar sin hacer nada
-        print("⚠️  No se pudo importar models.db")
+        print("[WARNING]  No se pudo importar models.db")
         return
     
     try:
@@ -720,14 +722,14 @@ def register_sample_documents_in_db():
                         1,  # System chat
                         source_type="sample_document"
                     )
-                    print(f"  📝 Registered in DB: {filename}")
+                    print(f"  [NOTE] Registered in DB: {filename}")
                 
                 conn.close()
         
-        print("✅ Sample documents registered in database")
+        print("[OK] Sample documents registered in database")
         
     except Exception as e:
-        print(f"❌ Error registering sample documents in DB: {str(e)}")
+        print(f"[ERROR] Error registering sample documents in DB: {str(e)}")
 
 
 def get_combined_retriever(score_threshold: float = 0.3):
@@ -745,17 +747,17 @@ def get_combined_retriever(score_threshold: float = 0.3):
         sample_retriever = None
         try:
             sample_retriever = load_retriever("sample_documents", score_threshold)
-            print("✅ Sample documents retriever loaded")
+            print("[OK] Sample documents retriever loaded")
         except Exception as e:
-            print(f"⚠️  Could not load sample documents: {e}")
+            print(f"[WARNING]  Could not load sample documents: {e}")
         
         # Try to load regular documents collection
         regular_retriever = None
         try:
             regular_retriever = load_retriever("ecomarket_kb", score_threshold)
-            print("✅ Regular documents retriever loaded")
+            print("[OK] Regular documents retriever loaded")
         except Exception as e:
-            print(f"⚠️  Could not load regular documents: {e}")
+            print(f"[WARNING]  Could not load regular documents: {e}")
         
         # Return the available retriever
         if sample_retriever:
@@ -766,7 +768,7 @@ def get_combined_retriever(score_threshold: float = 0.3):
             raise Exception("No collections available")
             
     except Exception as e:
-        print(f"❌ Error getting combined retriever: {e}")
+        print(f"[ERROR] Error getting combined retriever: {e}")
         raise e
 
 
@@ -775,41 +777,41 @@ def test_sample_documents():
     Test function to verify that sample documents are loaded correctly.
     """
     try:
-        print("🧪 Testing sample documents loading...")
+        print("[TEST] Testing sample documents loading...")
         
         # Test loading sample documents
         documents, collection_name = load_sample_documents()
-        print(f"📊 Loaded {len(documents)} documents from {collection_name}")
+        print(f"[DATA] Loaded {len(documents)} documents from {collection_name}")
         
         if documents:
             # Test creating/loading collection
             try:
                 vectordb = load_collection(collection_name)
-                print(f"✅ Collection '{collection_name}' loaded successfully")
+                print(f"[OK] Collection '{collection_name}' loaded successfully")
                 
                 # Test retriever
                 retriever = load_retriever(collection_name)
-                print("✅ Retriever created successfully")
+                print("[OK] Retriever created successfully")
                 
                 # Test a sample query
                 test_query = "¿Cuál es la política de devoluciones?"
-                print(f"🔍 Testing query: {test_query}")
+                print(f"[DEBUG] Testing query: {test_query}")
                 
                 try:
                     response = generate_answer_from_context(retriever, test_query)
-                    print(f"✅ Query response: {response[:100]}...")
+                    print(f"[OK] Query response: {response[:100]}...")
                     return True
                 except Exception as e:
-                    print(f"❌ Error testing query: {e}")
+                    print(f"[ERROR] Error testing query: {e}")
                     return False
                     
             except Exception as e:
-                print(f"❌ Error loading collection: {e}")
+                print(f"[ERROR] Error loading collection: {e}")
                 return False
         else:
-            print("❌ No documents loaded")
+            print("[ERROR] No documents loaded")
             return False
             
     except Exception as e:
-        print(f"❌ Error in test: {e}")
+        print(f"[ERROR] Error in test: {e}")
         return False

@@ -23,11 +23,15 @@ from tools.chat_memory import get_interview_data, check_interview_complete
 
 # Importar LangSmith para trazas
 try:
-    from langsmith import trace
+    from langsmith import trace, traceable
     LANGSMITH_AVAILABLE = True
 except ImportError:
     LANGSMITH_AVAILABLE = False
     trace = None
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 
 class IntelligentAgent:
@@ -55,6 +59,7 @@ class IntelligentAgent:
         """Verificar si el agente está listo"""
         return self.interviewer is not None
 
+    @traceable(name="IntelligentAgent.process_query")
     def process_query(
         self,
         query: str,
@@ -220,6 +225,24 @@ class IntelligentAgent:
             Primera pregunta de la entrevista
         """
         try:
+            # Intentar obtener nombre y email de la memoria del chat
+            from tools.chat_memory import retrieve_chat_memory
+            name_memory = retrieve_chat_memory(session_id, "name")
+            email_memory = retrieve_chat_memory(session_id, "email")
+            
+            # Si hay nombre en memoria, guardarlo en el perfil
+            if name_memory and name_memory.get("found"):
+                nombre = name_memory.get("memory_value", "")
+                if nombre:
+                    from tools.chat_memory import get_interview_data, store_interview_data
+                    profile = get_interview_data(session_id, "profile") or {}
+                    if "informacion_personal" not in profile:
+                        profile["informacion_personal"] = {}
+                    profile["informacion_personal"]["nombre"] = nombre
+                    if email_memory and email_memory.get("found"):
+                        profile["informacion_personal"]["email"] = email_memory.get("memory_value", "")
+                    store_interview_data(session_id, "profile", profile)
+            
             # Si el usuario dice algo como "hola", "quiero información", etc.
             # iniciamos directamente con la primera pregunta
 
@@ -233,9 +256,7 @@ class IntelligentAgent:
             )
 
             # Mensaje de bienvenida + primera pregunta
-            welcome_message = """¡Bienvenido al Sistema de Recomendación de Posgrados de la Universidad ICESI!
-
-Voy a hacerte algunas preguntas para conocerte mejor y recomendarte los programas de posgrado más adecuados para tu perfil profesional.
+            welcome_message = """Hola, soy el asistente de postgrados de la ICESI, te haré una serie de preguntas (máximo 20, en algunos casos) para poder construir un perfil y darte las mejores opciones de postgrado. Si no quieres responder más preguntas, solo escribe: "No me hagas mas preguntas"
 
 """
 
@@ -259,6 +280,46 @@ Voy a hacerte algunas preguntas para conocerte mejor y recomendarte los programa
             Siguiente pregunta o confirmación de finalización
         """
         try:
+            # PASO 0: Detectar si el usuario quiere detener las preguntas
+            if self._wants_to_stop_interview(answer):
+                # El usuario quiere detener, analizar perfil actual y recomendar
+                from tools.chat_memory import store_interview_data
+                store_interview_data(session_id, "interview_complete", True)
+                store_interview_data(session_id, "completed", True)
+                
+                tracer.log(
+                    operation="INTERVIEW_STOPPED_BY_USER",
+                    message="[INTERVIEW] Usuario solicitó detener preguntas",
+                    metadata={"session_id": session_id},
+                    level="INFO"
+                )
+                
+                # Analizar y generar recomendación inmediatamente
+                recommendation = self._analyze_and_recommend(session_id)
+                return f"Entendido. He detenido las preguntas. Voy a analizar el perfil que he recopilado hasta ahora para recomendarte los mejores programas.\n\n{recommendation}"
+            
+            # PASO 1: Detectar si el usuario está haciendo una pregunta en lugar de responder
+            if self._is_question_instead_of_answer(answer):
+                # El usuario está haciendo una pregunta, usar RAG para responder
+                rag_response = self._answer_question_with_rag(answer, session_id)
+                
+                # Después de responder, volver a mostrar la pregunta actual de la entrevista
+                current_question_data = get_interview_data(session_id, "current_question_data")
+                if current_question_data:
+                    current_question = current_question_data.get("question", "")
+                    return f"{rag_response}\n\n---\n\n{current_question}"
+                else:
+                    # Si no hay pregunta actual, iniciar nueva pregunta
+                    profile = self.interviewer.get_current_profile(session_id)
+                    answered_questions = get_interview_data(session_id, "answered_questions") or []
+                    next_q = self.interviewer._select_next_question(profile, answered_questions, session_id)
+                    if next_q:
+                        from tools.chat_memory import store_interview_data
+                        store_interview_data(session_id, "current_question_data", next_q)
+                        return f"{rag_response}\n\n---\n\n{next_q.get('question', '')}"
+                    else:
+                        return rag_response
+            
             # Procesar la respuesta con el INTERVIEWER Agent
             result = self.interviewer.process_answer(answer, session_id)
 
@@ -303,11 +364,115 @@ Voy a hacerte algunas preguntas para conocerte mejor y recomendarte los programa
             traceback.print_exc()
             return "Lo siento, hubo un error procesando tu respuesta. ¿Podrías repetir?"
 
+    def _wants_to_stop_interview(self, text: str) -> bool:
+        """
+        Detectar si el usuario quiere detener las preguntas de la entrevista.
+        
+        Args:
+            text: Texto del usuario
+        
+        Returns:
+            True si quiere detener, False en caso contrario
+        """
+        import re
+        text_lower = text.lower().strip()
+        
+        # Patrones que indican que quiere detener
+        stop_patterns = [
+            r'no me hagas mas preguntas',
+            r'no me hagas más preguntas',
+            r'no más preguntas',
+            r'no mas preguntas',
+            r'ya no preguntes',
+            r'deja de preguntar',
+            r'para de preguntar',
+            r'no quiero responder más',
+            r'no quiero responder mas',
+            r'ya tengo suficiente',
+            r'ya es suficiente',
+            r'recomiéndame ya',
+            r'recomiendame ya',
+            r'dame la recomendación',
+            r'dame la recomendacion',
+        ]
+        
+        for pattern in stop_patterns:
+            if re.search(pattern, text_lower):
+                return True
+        
+        return False
+
+    def _is_question_instead_of_answer(self, text: str) -> bool:
+        """
+        Detectar si el usuario está haciendo una pregunta en lugar de responder.
+        
+        Args:
+            text: Texto del usuario
+        
+        Returns:
+            True si parece ser una pregunta, False si es una respuesta
+        """
+        import re
+        text_lower = text.lower().strip()
+        
+        # Patrones que indican que es una pregunta
+        question_patterns = [
+            r'^¿',  # Empieza con ¿
+            r'\?$',  # Termina con ?
+            r'^(qué|que|cuál|cual|cuáles|cuales|cuando|cuándo|donde|dónde|como|cómo|por qué|porque|quien|quién)',
+            r'^(dime|cuéntame|explícame|información sobre|quiero saber|me gustaría saber|puedes decirme)',
+            r'^(cuánto|cuanto|cuántos|cuantos|cuántas|cuantas)',
+            r'^(hay|existe|tienen|tienes)',
+        ]
+        
+        # Verificar si coincide con algún patrón de pregunta
+        for pattern in question_patterns:
+            if re.search(pattern, text_lower):
+                return True
+        
+        # Si tiene signos de interrogación
+        if '?' in text or '¿' in text:
+            return True
+        
+        # Si es muy corto y parece pregunta
+        if len(text.split()) <= 5 and any(word in text_lower for word in ['qué', 'que', 'cuál', 'cual', 'cómo', 'como']):
+            return True
+        
+        return False
+
+    def _answer_question_with_rag(self, question: str, session_id: str) -> str:
+        """
+        Responder una pregunta del usuario usando RAG.
+        
+        Args:
+            question: Pregunta del usuario
+            session_id: ID de la sesión
+        
+        Returns:
+            Respuesta generada con RAG
+        """
+        try:
+            # Usar el recommender agent que tiene RAG integrado
+            response = self.recommender.answer_specific_question(question)
+            
+            tracer.log(
+                operation="RAG_QUESTION_ANSWERED",
+                message="[RAG] Pregunta respondida durante entrevista",
+                metadata={"session_id": session_id, "question": question[:100]},
+                level="INFO"
+            )
+            
+            return response
+            
+        except Exception as e:
+            print(f"[ERROR] Error answering question with RAG: {e}")
+            return "Lo siento, no pude responder tu pregunta en este momento. ¿Podrías continuar con la entrevista?"
+
     def _analyze_and_recommend(self, session_id: str) -> str:
         """
         Analizar el perfil del estudiante y generar recomendación.
 
-        Este método coordina PROFILER Agent + RECOMMENDER Agent
+        Este método coordina PROFILER Agent + RECOMMENDER Agent usando ORCHESTRATOR
 
         Args:
             session_id: ID de la sesión

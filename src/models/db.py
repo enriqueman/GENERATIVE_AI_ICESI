@@ -2,6 +2,17 @@ import sqlite3
 import time
 import os
 
+# Importar traceable para instrumentar funciones de base de datos
+try:
+    from langsmith import traceable
+    TRACEABLE_AVAILABLE = True
+except ImportError:
+    TRACEABLE_AVAILABLE = False
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 def connect_db():
     """Connect to SQLite database with timeout and WAL mode"""
     # Obtener el directorio base del proyecto (dos niveles arriba desde src/models/)
@@ -165,6 +176,46 @@ def init_database():
             expires_at DATETIME NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(user_id) REFERENCES chat_users(id)
+        )
+    """)
+    
+    # Create interview_questions table for storing interview questions
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS interview_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_id TEXT UNIQUE NOT NULL,
+            question TEXT NOT NULL,
+            field TEXT NOT NULL,
+            field_secondary TEXT,
+            validation TEXT NOT NULL,
+            required BOOLEAN DEFAULT 1,
+            category TEXT,
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            active BOOLEAN DEFAULT 1
+        )
+    """)
+    
+    # Create 'posgrado_programs' table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS posgrado_programs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            program_name TEXT NOT NULL,
+            program_type TEXT,
+            description TEXT,
+            areas_tematicas TEXT,
+            requisitos TEXT,
+            modalidad TEXT,
+            duracion TEXT,
+            inversion TEXT,
+            source_file TEXT,
+            source_type TEXT DEFAULT 'document',
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            active BOOLEAN DEFAULT 1,
+            loaded_to_rag BOOLEAN DEFAULT 0
         )
     """)
     
@@ -778,6 +829,484 @@ def verify_chat_session(session_token: str) -> dict:
     except Exception as e:
         print(f"Error verifying chat session: {e}")
         return None
+    finally:
+        conn.close()
+
+# CRUD Operations for 'interview_questions' table
+def create_interview_question(
+    question_id: str,
+    question: str,
+    field: str,
+    field_secondary: str = None,
+    validation: str = "text",
+    required: bool = True,
+    category: str = None,
+    metadata: str = None
+) -> dict:
+    """Create a new interview question"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT INTO interview_questions 
+            (question_id, question, field, field_secondary, validation, required, category, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (question_id, question, field, field_secondary, validation, required, category, metadata))
+        
+        conn.commit()
+        question_db_id = cursor.lastrowid
+        
+        return {
+            "id": question_db_id,
+            "question_id": question_id,
+            "question": question,
+            "field": field,
+            "field_secondary": field_secondary,
+            "validation": validation,
+            "required": required,
+            "category": category,
+            "metadata": metadata
+        }
+    except sqlite3.IntegrityError:
+        # If question_id already exists, update instead
+        return update_interview_question(question_id, question, field, field_secondary, validation, required, category, metadata)
+    except Exception as e:
+        print(f"Error creating interview question: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def get_interview_question(question_id: str = None, active_only: bool = True) -> list:
+    """Get interview question(s)"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        if question_id:
+            query = "SELECT * FROM interview_questions WHERE question_id = ?"
+            params = (question_id,)
+            if active_only:
+                query += " AND active = 1"
+            cursor.execute(query, params)
+            result = cursor.fetchone()
+            
+            if result:
+                columns = [desc[0] for desc in cursor.description]
+                return dict(zip(columns, result))
+            return None
+        else:
+            query = "SELECT * FROM interview_questions"
+            if active_only:
+                query += " WHERE active = 1"
+            query += " ORDER BY created_at ASC"
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+            columns = [desc[0] for desc in cursor.description]
+            return [dict(zip(columns, row)) for row in results]
+    except Exception as e:
+        print(f"Error getting interview question: {e}")
+        return []
+    finally:
+        conn.close()
+
+def update_interview_question(
+    question_id: str,
+    question: str = None,
+    field: str = None,
+    field_secondary: str = None,
+    validation: str = None,
+    required: bool = None,
+    category: str = None,
+    metadata: str = None
+) -> dict:
+    """Update an interview question"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        updates = []
+        params = []
+        
+        if question is not None:
+            updates.append("question = ?")
+            params.append(question)
+        if field is not None:
+            updates.append("field = ?")
+            params.append(field)
+        if field_secondary is not None:
+            updates.append("field_secondary = ?")
+            params.append(field_secondary)
+        if validation is not None:
+            updates.append("validation = ?")
+            params.append(validation)
+        if required is not None:
+            updates.append("required = ?")
+            params.append(required)
+        if category is not None:
+            updates.append("category = ?")
+            params.append(category)
+        if metadata is not None:
+            updates.append("metadata = ?")
+            params.append(metadata)
+        
+        if not updates:
+            return None
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(question_id)
+        
+        query = f"UPDATE interview_questions SET {', '.join(updates)} WHERE question_id = ?"
+        cursor.execute(query, params)
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            return get_interview_question(question_id)
+        return None
+    except Exception as e:
+        print(f"Error updating interview question: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+# CRUD Operations for 'posgrado_programs' table
+@traceable(name="DB.create_posgrado_program")
+def create_posgrado_program(
+    program_name: str,
+    program_type: str = None,
+    description: str = None,
+    areas_tematicas: str = None,
+    requisitos: str = None,
+    modalidad: str = None,
+    duracion: str = None,
+    inversion: str = None,
+    source_file: str = None,
+    source_type: str = "document",
+    metadata: str = None,
+    active: bool = True
+) -> int:
+    """
+    Crear un nuevo programa de posgrado en la base de datos.
+    
+    Args:
+        program_name: Nombre del programa
+        program_type: Tipo (maestría, especialización, MBA, etc.)
+        description: Descripción del programa
+        areas_tematicas: Áreas temáticas (JSON string o texto)
+        requisitos: Requisitos del programa
+        modalidad: Modalidad (presencial, virtual, híbrida)
+        duracion: Duración del programa
+        inversion: Inversión aproximada
+        source_file: Archivo fuente del programa
+        source_type: Tipo de fuente (document, manual)
+        metadata: Metadata adicional (JSON string)
+        active: Si el programa está activo
+    
+    Returns:
+        ID del programa creado
+    """
+    import json
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    # Convertir metadata a JSON string si es dict
+    if metadata and isinstance(metadata, dict):
+        metadata = json.dumps(metadata, ensure_ascii=False)
+    elif metadata is None:
+        metadata = None
+    
+    # Convertir areas_tematicas a string si es lista
+    # Convertir areas_tematicas a string si es lista
+    if areas_tematicas is not None:
+        if isinstance(areas_tematicas, list):
+            areas_tematicas = ", ".join([str(a).strip() for a in areas_tematicas if a])
+        elif not isinstance(areas_tematicas, str):
+            areas_tematicas = str(areas_tematicas) if areas_tematicas else None
+    else:
+        areas_tematicas = None
+    
+    # Asegurar que todos los campos sean strings o None
+    program_name = str(program_name) if program_name else None
+    program_type = str(program_type) if program_type else None
+    description = str(description) if description else None
+    requisitos = str(requisitos) if requisitos else None
+    modalidad = str(modalidad) if modalidad else None
+    duracion = str(duracion) if duracion else None
+    inversion = str(inversion) if inversion else None
+    source_file = str(source_file) if source_file else None
+    source_type = str(source_type) if source_type else "document"
+    
+    try:
+        cursor.execute("""
+            INSERT INTO posgrado_programs (
+                program_name, program_type, description, areas_tematicas,
+                requisitos, modalidad, duracion, inversion, source_file,
+                source_type, metadata, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            program_name, program_type, description, areas_tematicas,
+            requisitos, modalidad, duracion, inversion, source_file,
+            source_type, metadata, 1 if active else 0
+        ))
+        
+        program_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return program_id
+    except sqlite3.IntegrityError as e:
+        conn.close()
+        raise Exception(f"Error creando programa: {str(e)}")
+
+
+@traceable(name="DB.get_posgrado_program")
+def get_posgrado_program(program_id: int = None, program_name: str = None, active_only: bool = True) -> list:
+    """
+    Obtener programa(s) de posgrado de la base de datos.
+    
+    Args:
+        program_id: ID del programa (opcional)
+        program_name: Nombre del programa (opcional)
+        active_only: Solo programas activos
+    
+    Returns:
+        Lista de programas (como diccionarios)
+    """
+    import json
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    query = "SELECT * FROM posgrado_programs WHERE 1=1"
+    params = []
+    
+    if program_id:
+        query += " AND id = ?"
+        params.append(program_id)
+    
+    if program_name:
+        query += " AND program_name = ?"
+        params.append(program_name)
+    
+    if active_only:
+        query += " AND active = 1"
+    
+    query += " ORDER BY created_at DESC"
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # Convertir a diccionarios
+    columns = [
+        'id', 'program_name', 'program_type', 'description', 'areas_tematicas',
+        'requisitos', 'modalidad', 'duracion', 'inversion', 'source_file',
+        'source_type', 'metadata', 'created_at', 'updated_at', 'active', 'loaded_to_rag'
+    ]
+    
+    programs = []
+    for row in rows:
+        program = dict(zip(columns, row))
+        
+        # Parsear metadata si existe
+        if program['metadata']:
+            try:
+                program['metadata'] = json.loads(program['metadata'])
+            except:
+                pass
+        
+        programs.append(program)
+    
+    return programs
+
+
+@traceable(name="DB.list_posgrado_programs")
+def list_posgrado_programs(active_only: bool = True) -> list:
+    """
+    Listar todos los programas de posgrado.
+    
+    Args:
+        active_only: Solo programas activos
+    
+    Returns:
+        Lista de programas
+    """
+    return get_posgrado_program(active_only=active_only)
+
+
+def update_posgrado_program(
+    program_id: int,
+    program_name: str = None,
+    program_type: str = None,
+    description: str = None,
+    areas_tematicas: str = None,
+    requisitos: str = None,
+    modalidad: str = None,
+    duracion: str = None,
+    inversion: str = None,
+    metadata: str = None,
+    active: bool = None,
+    loaded_to_rag: bool = None
+) -> bool:
+    """
+    Actualizar un programa de posgrado.
+    
+    Args:
+        program_id: ID del programa
+        ... (otros campos opcionales)
+    
+    Returns:
+        True si se actualizó exitosamente
+    """
+    import json
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    updates = []
+    params = []
+    
+    if program_name is not None:
+        updates.append("program_name = ?")
+        params.append(program_name)
+    
+    if program_type is not None:
+        updates.append("program_type = ?")
+        params.append(program_type)
+    
+    if description is not None:
+        updates.append("description = ?")
+        params.append(description)
+    
+    if areas_tematicas is not None:
+        # Convertir lista a string si es necesario
+        if isinstance(areas_tematicas, list):
+            areas_tematicas = ", ".join([str(a).strip() for a in areas_tematicas if a])
+        elif not isinstance(areas_tematicas, str):
+            areas_tematicas = str(areas_tematicas) if areas_tematicas else None
+        updates.append("areas_tematicas = ?")
+        params.append(areas_tematicas)
+    
+    if requisitos is not None:
+        # Convertir a string si no lo es
+        if not isinstance(requisitos, str):
+            requisitos = str(requisitos) if requisitos else None
+        updates.append("requisitos = ?")
+        params.append(requisitos)
+    
+    if modalidad is not None:
+        # Convertir a string si no lo es
+        if not isinstance(modalidad, str):
+            modalidad = str(modalidad) if modalidad else None
+        updates.append("modalidad = ?")
+        params.append(modalidad)
+    
+    if duracion is not None:
+        # Convertir a string si no lo es
+        if not isinstance(duracion, str):
+            duracion = str(duracion) if duracion else None
+        updates.append("duracion = ?")
+        params.append(duracion)
+    
+    if inversion is not None:
+        # Convertir a string si no lo es
+        if not isinstance(inversion, str):
+            inversion = str(inversion) if inversion else None
+        updates.append("inversion = ?")
+        params.append(inversion)
+    
+    if metadata is not None:
+        if isinstance(metadata, dict):
+            metadata = json.dumps(metadata, ensure_ascii=False)
+        elif not isinstance(metadata, str):
+            metadata = str(metadata) if metadata else None
+        updates.append("metadata = ?")
+        params.append(metadata)
+    
+    if active is not None:
+        updates.append("active = ?")
+        params.append(1 if active else 0)
+    
+    if loaded_to_rag is not None:
+        updates.append("loaded_to_rag = ?")
+        params.append(1 if loaded_to_rag else 0)
+    
+    if not updates:
+        conn.close()
+        return False
+    
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(program_id)
+    
+    query = f"UPDATE posgrado_programs SET {', '.join(updates)} WHERE id = ?"
+    
+    try:
+        cursor.execute(query, params)
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        conn.close()
+        print(f"[ERROR] Error updating program: {e}")
+        return False
+
+
+def delete_posgrado_program(program_id: int, soft_delete: bool = True) -> bool:
+    """
+    Eliminar un programa de posgrado.
+    
+    Args:
+        program_id: ID del programa
+        soft_delete: Si True, solo marca como inactivo (default: True)
+    
+    Returns:
+        True si se eliminó exitosamente
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        if soft_delete:
+            cursor.execute(
+                "UPDATE posgrado_programs SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (program_id,)
+            )
+        else:
+            cursor.execute("DELETE FROM posgrado_programs WHERE id = ?", (program_id,))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        conn.close()
+        print(f"[ERROR] Error deleting program: {e}")
+        return False
+
+
+def delete_interview_question(question_id: str, soft_delete: bool = True) -> bool:
+    """Delete an interview question (soft delete by default)"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        if soft_delete:
+            cursor.execute("""
+                UPDATE interview_questions 
+                SET active = 0, updated_at = CURRENT_TIMESTAMP 
+                WHERE question_id = ?
+            """, (question_id,))
+        else:
+            cursor.execute("DELETE FROM interview_questions WHERE question_id = ?", (question_id,))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error deleting interview question: {e}")
+        conn.rollback()
+        return False
     finally:
         conn.close()
 

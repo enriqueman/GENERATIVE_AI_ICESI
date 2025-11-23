@@ -51,19 +51,28 @@ def admin_panel():
             st.rerun()
     
     # Tabs for different management sections
-    tab1, tab2, tab3, tab4 = st.tabs(["[BOOKS] Documentos", "[DATA] Estadísticas", "[SETTINGS] Configuración", "[DEBUG] Trazabilidad"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "[BOOKS] Documentos", 
+        "[🎓] Programas Posgrado", 
+        "[DATA] Estadísticas", 
+        "[SETTINGS] Configuración", 
+        "[DEBUG] Trazabilidad"
+    ])
     
     with tab1:
         manage_documents()
     
-    with tab4:
+    with tab2:
+        manage_posgrado_programs()
+    
+    with tab5:
         from views.tracing_panel import display_tracing_panel
         display_tracing_panel()
     
-    with tab2:
+    with tab3:
         show_statistics()
     
-    with tab3:
+    with tab4:
         show_settings()
 
 def manage_documents():
@@ -288,6 +297,315 @@ def show_settings():
     with col2:
         if st.button("[DATA] Exportar estadísticas"):
             st.info("Función de exportación en desarrollo")
+
+def manage_posgrado_programs():
+    """Gestión de programas de posgrado"""
+    
+    st.subheader("🎓 Gestión de Programas de Posgrado")
+    
+    # Opciones: Ver programas, Añadir manualmente, Cargar archivo
+    option = st.radio(
+        "Selecciona una opción:",
+        ["📋 Ver Programas", "➕ Añadir Manualmente", "📤 Cargar Archivo"],
+        horizontal=True
+    )
+    
+    if option == "📋 Ver Programas":
+        list_posgrado_programs()
+    elif option == "➕ Añadir Manualmente":
+        add_program_manually()
+    elif option == "📤 Cargar Archivo":
+        upload_program_file()
+
+def list_posgrado_programs():
+    """Listar todos los programas de posgrado"""
+    from models.db import list_posgrado_programs
+    
+    st.markdown("### 📋 Programas Cargados en el Sistema")
+    
+    programs = list_posgrado_programs(active_only=False)
+    
+    if programs:
+        st.write(f"**Total de programas:** {len(programs)}")
+        
+        # Filtros
+        col1, col2 = st.columns(2)
+        with col1:
+            program_type_filter = st.selectbox(
+                "Filtrar por tipo:",
+                ["Todos", "maestria", "especializacion", "mba", "doctorado"]
+            )
+        with col2:
+            active_filter = st.selectbox(
+                "Estado:",
+                ["Todos", "Activos", "Inactivos"]
+            )
+        
+        # Aplicar filtros
+        filtered_programs = programs
+        if program_type_filter != "Todos":
+            filtered_programs = [p for p in filtered_programs if p.get("program_type", "").lower() == program_type_filter.lower()]
+        if active_filter == "Activos":
+            filtered_programs = [p for p in filtered_programs if p.get("active", 0) == 1]
+        elif active_filter == "Inactivos":
+            filtered_programs = [p for p in filtered_programs if p.get("active", 0) == 0]
+        
+        st.write(f"**Programas mostrados:** {len(filtered_programs)}")
+        st.markdown("---")
+        
+        # Mostrar programas
+        for program in filtered_programs:
+            program_id = program.get("id")
+            program_name = program.get("program_name", "Sin nombre")
+            program_type = program.get("program_type", "N/A")
+            description = program.get("description", "Sin descripción")
+            source_file = program.get("source_file", "Manual")
+            active = program.get("active", 0) == 1
+            loaded_to_rag = program.get("loaded_to_rag", 0) == 1
+            areas = program.get("areas_tematicas", "")
+            modalidad = program.get("modalidad", "N/A")
+            duracion = program.get("duracion", "N/A")
+            
+            # Estado visual
+            status_color = "🟢" if active else "🔴"
+            rag_status = "✅" if loaded_to_rag else "❌"
+            
+            with st.expander(f"{status_color} **{program_name}** ({program_type.upper()})", expanded=False):
+                col1, col2 = st.columns([0.7, 0.3])
+                
+                with col1:
+                    st.write(f"**Descripción:** {description[:200]}{'...' if len(description) > 200 else ''}")
+                    if areas:
+                        st.write(f"**Áreas temáticas:** {areas}")
+                    st.write(f"**Modalidad:** {modalidad} | **Duración:** {duracion}")
+                    st.write(f"**Fuente:** {source_file}")
+                    st.write(f"**Cargado en RAG:** {rag_status}")
+                
+                with col2:
+                    if st.button("✏️ Editar", key=f"edit_{program_id}"):
+                        st.session_state[f"editing_program_{program_id}"] = True
+                        st.rerun()
+                    
+                    if st.button("🗑️ Eliminar", key=f"delete_{program_id}"):
+                        from models.db import delete_posgrado_program
+                        try:
+                            delete_posgrado_program(program_id)
+                            st.success(f"Programa '{program_name}' eliminado")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error eliminando programa: {e}")
+                    
+                    # Toggle activo/inactivo
+                    toggle_text = "Desactivar" if active else "Activar"
+                    if st.button(toggle_text, key=f"toggle_{program_id}"):
+                        from models.db import update_posgrado_program
+                        try:
+                            update_posgrado_program(program_id, active=not active)
+                            st.success(f"Programa {'activado' if not active else 'desactivado'}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error actualizando programa: {e}")
+    else:
+        st.info("No hay programas cargados en el sistema. Puedes añadirlos manualmente o cargar un archivo.")
+
+def add_program_manually():
+    """Formulario para añadir programa manualmente"""
+    from models.db import create_posgrado_program
+    from agents.program_loader_agent import ProgramLoaderAgent
+    
+    st.markdown("### ➕ Añadir Programa de Posgrado Manualmente")
+    
+    with st.form("add_program_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            program_name = st.text_input("Nombre del Programa *", placeholder="Ej: Maestría en Ciencia de Datos")
+            program_type = st.selectbox(
+                "Tipo de Programa *",
+                ["maestria", "especializacion", "mba", "doctorado"]
+            )
+            modalidad = st.selectbox(
+                "Modalidad",
+                ["presencial", "virtual", "hibrida", "flexible"]
+            )
+            duracion = st.text_input("Duración", placeholder="Ej: 2 años, 4 semestres")
+        
+        with col2:
+            areas_tematicas = st.text_area(
+                "Áreas Temáticas (separadas por comas)",
+                placeholder="Ej: Ciencia de Datos, Machine Learning, Big Data"
+            )
+            requisitos = st.text_area(
+                "Requisitos",
+                placeholder="Ej: Título profesional, experiencia mínima 2 años"
+            )
+            inversion = st.text_input("Inversión", placeholder="Ej: $15.000.000")
+        
+        description = st.text_area(
+            "Descripción del Programa *",
+            placeholder="Descripción detallada del programa, objetivos, perfil del egresado, etc.",
+            height=150
+        )
+        
+        source_type = st.selectbox(
+            "Tipo de Fuente",
+            ["manual", "document"]
+        )
+        
+        active = st.checkbox("Programa Activo", value=True)
+        
+        submitted = st.form_submit_button("💾 Guardar Programa", type="primary")
+        
+        if submitted:
+            if not program_name or not description:
+                st.error("Por favor completa los campos obligatorios (*)")
+            else:
+                with st.spinner("Guardando programa..."):
+                    try:
+                        # Convertir áreas temáticas a lista
+                        areas_list = [a.strip() for a in areas_tematicas.split(",") if a.strip()] if areas_tematicas else []
+                        
+                        program_id = create_posgrado_program(
+                            program_name=program_name,
+                            program_type=program_type,
+                            description=description,
+                            areas_tematicas=areas_list,
+                            requisitos=requisitos if requisitos else None,
+                            modalidad=modalidad if modalidad else None,
+                            duracion=duracion if duracion else None,
+                            inversion=inversion if inversion else None,
+                            source_file="manual_entry",
+                            source_type=source_type,
+                            active=active
+                        )
+                        
+                        # Cargar al RAG
+                        try:
+                            # Crear documento temporal para cargar al RAG
+                            from langchain_core.documents import Document
+                            
+                            program_doc = Document(
+                                page_content=description,
+                                metadata={
+                                    "program_name": program_name,
+                                    "program_type": program_type,
+                                    "source_type": "posgrado_program",
+                                    "program_tag": "programa_posgrado",
+                                    "source": "manual_entry",
+                                    "areas_tematicas": ", ".join(areas_list) if areas_list else "",
+                                    "modalidad": modalidad,
+                                    "duracion": duracion
+                                }
+                            )
+                            
+                            # Cargar al RAG
+                            from utils.vector_functions import load_collection, add_documents_to_collection, create_collection
+                            collection_name = "posgrado_programs"
+                            
+                            try:
+                                vectordb = load_collection(collection_name)
+                                vectordb = add_documents_to_collection(vectordb, [program_doc])
+                            except:
+                                vectordb = create_collection(collection_name, [program_doc])
+                            
+                            # Actualizar flag en BD
+                            from models.db import update_posgrado_program
+                            update_posgrado_program(program_id, loaded_to_rag=True)
+                            
+                            st.success(f"✅ Programa '{program_name}' guardado y cargado al RAG exitosamente!")
+                        except Exception as rag_error:
+                            st.warning(f"⚠️ Programa guardado en BD pero error al cargar al RAG: {rag_error}")
+                            st.success(f"✅ Programa '{program_name}' guardado en base de datos")
+                        
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error guardando programa: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
+
+def upload_program_file():
+    """Cargar archivo de programa y procesarlo con ProgramLoaderAgent"""
+    from agents.program_loader_agent import ProgramLoaderAgent
+    import os
+    
+    st.markdown("### 📤 Cargar Archivo de Programa de Posgrado")
+    st.info("💡 El sistema procesará automáticamente el archivo y extraerá la información del programa usando IA.")
+    
+    uploaded_file = st.file_uploader(
+        "Selecciona un archivo de programa",
+        type=["pdf", "txt", "docx"],
+        help="Formatos soportados: PDF, TXT, DOCX"
+    )
+    
+    if uploaded_file:
+        st.write(f"**Archivo seleccionado:** {uploaded_file.name}")
+        st.write(f"**Tamaño:** {uploaded_file.size / 1024:.2f} KB")
+        
+        if st.button("🚀 Procesar y Cargar Programa", type="primary"):
+            with st.spinner("Procesando archivo con IA..."):
+                try:
+                    # Guardar archivo temporal
+                    temp_dir = "static/temp_files"
+                    os.makedirs(temp_dir, exist_ok=True)
+                    temp_file_path = os.path.join(temp_dir, uploaded_file.name)
+                    
+                    with open(temp_file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    
+                    # Procesar con ProgramLoaderAgent
+                    loader = ProgramLoaderAgent()
+                    
+                    # Obtener ruta completa
+                    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    full_path = os.path.join(base_dir, temp_file_path)
+                    
+                    # Crear documentos del programa
+                    program_docs = loader.create_program_documents(full_path)
+                    
+                    if program_docs:
+                        st.success(f"✅ Programa procesado exitosamente!")
+                        st.write(f"**Documentos creados:** {len(program_docs)}")
+                        
+                        # Mostrar información extraída
+                        if program_docs:
+                            doc = program_docs[0]
+                            metadata = doc.metadata
+                            
+                            st.markdown("#### 📋 Información Extraída:")
+                            st.json({
+                                "Nombre": metadata.get("program_name", "N/A"),
+                                "Tipo": metadata.get("program_type", "N/A"),
+                                "Fuente": metadata.get("source", "N/A"),
+                                "Áreas": metadata.get("areas_tematicas", "N/A")
+                            })
+                        
+                        # Limpiar archivo temporal
+                        try:
+                            os.remove(temp_file_path)
+                        except:
+                            pass
+                        
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo procesar el archivo. Verifica que contenga información de un programa de posgrado.")
+                        try:
+                            os.remove(temp_file_path)
+                        except:
+                            pass
+                        
+                except Exception as e:
+                    st.error(f"❌ Error procesando archivo: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                    
+                    # Limpiar archivo temporal
+                    try:
+                        if 'temp_file_path' in locals():
+                            os.remove(temp_file_path)
+                    except:
+                        pass
 
 if __name__ == "__main__":
     admin_panel()

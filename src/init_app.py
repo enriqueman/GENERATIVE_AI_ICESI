@@ -120,6 +120,38 @@ def initialize_application():
         print("[IDEA] Los documentos aparecerán en el panel de admin pero las consultas pueden no funcionar")
     print()
     
+    # 7. Inicializar preguntas de entrevista
+    print("[QUESTION] Inicializando preguntas de entrevista...")
+    try:
+        from utils.load_interview_questions import initialize_interview_questions
+        result = initialize_interview_questions(load_to_db=True, load_to_rag=True)
+        if result.get("success"):
+            print(f"[OK] {result.get('db_count', 0)} preguntas cargadas en base de datos")
+            if result.get("rag_success"):
+                print("[OK] Preguntas cargadas en RAG exitosamente")
+            else:
+                print("[WARNING] No se pudieron cargar preguntas en RAG (puede necesitar API key de OpenAI)")
+        else:
+            print(f"[WARNING] Error inicializando preguntas: {result.get('message', 'Error desconocido')}")
+    except Exception as e:
+        print(f"[WARNING] Error inicializando preguntas de entrevista: {e}")
+        print("[IDEA] Las preguntas pueden no estar disponibles para las entrevistas")
+    print()
+    
+    # 8. Cargar programas de posgrado al RAG
+    print("[PROGRAMS] Cargando programas de posgrado al RAG...")
+    try:
+        from agents.program_loader_agent import get_program_loader
+        loader = get_program_loader()
+        if loader.load_programs_to_rag():
+            print("[OK] Programas de posgrado cargados al RAG exitosamente")
+        else:
+            print("[WARNING] No se pudieron cargar programas al RAG (puede necesitar API key de OpenAI)")
+    except Exception as e:
+        print(f"[WARNING] Error cargando programas de posgrado: {e}")
+        print("[IDEA] Los programas pueden no estar disponibles para recomendaciones")
+    print()
+    
     print("=" * 60)
     print("[START] INICIALIZACIÓN COMPLETADA")
     print("=" * 60)

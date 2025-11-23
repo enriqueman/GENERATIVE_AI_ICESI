@@ -1,0 +1,194 @@
+[
+  {
+    "id": "academico.titulo",
+    "question": "¿Cuál es tu título profesional o pregrado actual?",
+    "field": "academico.titulo_pregrado",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "academico.universidad",
+    "question": "¿En qué universidad estudiaste tu pregrado?",
+    "field": "academico.universidad",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "academico.ano_grado",
+    "question": "¿En qué año terminaste tu pregrado?",
+    "field": "academico.ano_graduacion",
+    "field_secondary": null,
+    "validation": "number",
+    "required": true
+  },
+  {
+    "id": "academico.posgrados_previos",
+    "question": "¿Tienes otros estudios de posgrado, diplomados o especializaciones? ¿Cuáles?",
+    "field": "academico.posgrados_previos",
+    "field_secondary": null,
+    "validation": "text",
+    "required": false
+  },
+  {
+    "id": "academico.fortalezas",
+    "question": "¿En qué áreas te sientes con mejor base académica (ej. finanzas, programación, mercadeo, salud, derecho, etc.)?",
+    "field": "academico.fortalezas",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "laboral.sector",
+    "question": "¿En qué sector trabajas actualmente (ej. salud, educación, TI, banca, manufactura, gobierno, etc.)?",
+    "field": "laboral.sector",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "laboral.cargo",
+    "question": "¿Cuál es tu cargo actual y tus principales responsabilidades?",
+    "field": "laboral.cargo",
+    "field_secondary": "laboral.responsabilidades",
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "laboral.experiencia_total",
+    "question": "¿Cuántos años de experiencia laboral tienes?",
+    "field": "laboral.anos_experiencia",
+    "field_secondary": null,
+    "validation": "number",
+    "required": true
+  },
+  {
+    "id": "laboral.cambio_area",
+    "question": "¿Buscas cambiar de área/carrera o profundizar en la misma área?",
+    "field": "laboral.intencion_cambio",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "objetivos.meta_posgrado",
+    "question": "¿Cuál es tu principal objetivo al estudiar un posgrado?",
+    "field": "objetivos.meta_principal",
+    "field_secondary": "objetivos.motivacion",
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "objetivos.futuro_laboral",
+    "question": "¿En qué te gustaría estar trabajando en 3–5 años?",
+    "field": "objetivos.futuro_laboral",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "objetivos.enfoque",
+    "question": "¿Te interesa un enfoque más aplicado/práctico o más académico/investigativo?",
+    "field": "objetivos.enfoque_preferido",
+    "field_secondary": null,
+    "validation": "choice",
+    "required": true
+  },
+  {
+    "id": "objetivos.enfasis",
+    "question": "¿Te interesa que el programa tenga énfasis en investigación, industria, emprendimiento o docencia?",
+    "field": "objetivos.enfasis",
+    "field_secondary": null,
+    "validation": "multi_choice",
+    "required": true
+  },
+  {
+    "id": "logistica.modalidad",
+    "question": "¿Prefieres modalidad: presencial, virtual, híbrida?",
+    "field": "logistica.modalidad_preferida",
+    "field_secondary": null,
+    "validation": "choice",
+    "required": true
+  },
+  {
+    "id": "logistica.ubicacion",
+    "question": "¿En qué ciudad/país estás ubicado actualmente?",
+    "field": "logistica.ubicacion",
+    "field_secondary": null,
+    "validation": "text",
+    "required": true
+  },
+  {
+    "id": "logistica.disposicion_cambio",
+    "question": "¿Estarías dispuesto(a) a desplazarte a otra ciudad/país para estudiar?",
+    "field": "logistica.cambio_residencia",
+    "field_secondary": null,
+    "validation": "yes_no",
+    "required": true
+  },
+  {
+    "id": "logistica.tiempo_disponible",
+    "question": "¿Cuánto tiempo semanal puedes dedicar al posgrado? (ej. <10h, 10–20h, >20h)",
+    "field": "logistica.tiempo_estudio",
+    "field_secondary": null,
+    "validation": "choice",
+    "required": true
+  },
+  {
+    "id": "logistica.horarios",
+    "question": "¿Prefieres clases entre semana, fines de semana o flexible?",
+    "field": "logistica.horario_preferido",
+    "field_secondary": null,
+    "validation": "choice",
+    "required": true
+  },
+  {
+    "id": "economia.presupuesto",
+    "question": "¿Tienes un presupuesto aproximado para la matrícula del programa?",
+    "field": "economia.presupuesto",
+    "field_secondary": null,
+    "validation": "number_or_range",
+    "required": true
+  },
+  {
+    "id": "economia.financiacion",
+    "question": "¿Estás buscando becas, financiación o apoyo de la empresa?",
+    "field": "economia.opciones_financiacion",
+    "field_secondary": null,
+    "validation": "text",
+    "required": false
+  },
+  {
+    "id": "economia.convenios",
+    "question": "¿Te interesan programas con opciones de financiación o convenios empresariales?",
+    "field": "economia.convenios",
+    "field_secondary": null,
+    "validation": "yes_no",
+    "required": false
+  },
+  {
+    "id": "intereses.areas",
+    "question": "¿En qué áreas temáticas estás más interesado(a)?",
+    "field": "intereses.areas",
+    "field_secondary": null,
+    "validation": "multi_choice",
+    "required": true
+  },
+  {
+    "id": "intereses.temas",
+    "question": "Menciona 3 temas que te gustaría que el posgrado cubra en profundidad.",
+    "field": "intereses.temas_clave",
+    "field_secondary": null,
+    "validation": "list",
+    "required": true
+  },
+  {
+    "id": "intereses.no_interes",
+    "question": "¿Hay temas que definitivamente no te interesan?",
+    "field": "intereses.temas_exclusion",
+    "field_secondary": null,
+    "validation": "text",
+    "required": false
+  }
+]

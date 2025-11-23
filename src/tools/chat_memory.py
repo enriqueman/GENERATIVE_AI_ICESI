@@ -359,6 +359,7 @@ def get_context_for_query(session_id: str, trace_id: str = None) -> str:
 # FUNCIONES PARA INTERVIEWER AGENT
 # ============================================================================
 
+@TRACEABLE(name="ChatMemory.store_interview_data")
 def store_interview_data(session_id: str, key: str, value: Any, ttl_minutes: int = 30) -> bool:
     """
     Almacenar datos de la entrevista (TTL extendido a 30 minutos)
@@ -392,6 +393,7 @@ def store_interview_data(session_id: str, key: str, value: Any, ttl_minutes: int
         return False
 
 
+@TRACEABLE(name="ChatMemory.get_interview_data")
 def get_interview_data(session_id: str, key: str) -> Any:
     """
     Obtener datos de la entrevista

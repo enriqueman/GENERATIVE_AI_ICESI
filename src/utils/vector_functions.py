@@ -50,6 +50,17 @@ def get_base_dir():
     """Obtener el directorio base del proyecto (dos niveles arriba desde src/utils/)"""
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Importar traceable de LangSmith para instrumentar funciones
+try:
+    from langsmith import traceable
+    TRACEABLE_AVAILABLE = True
+except ImportError:
+    TRACEABLE_AVAILABLE = False
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # Configurar LangSmith tracing ANTES de inicializar los modelos
 def _configure_langsmith_tracing():
     """Configurar LangSmith tracing si está habilitado"""
@@ -391,6 +402,7 @@ def load_collection(collection_name):
     return vectordb
 
 
+@traceable(name="RAG.load_retriever")
 def load_retriever(collection_name, score_threshold: float = 0.3):
     """
     Create a retriever from a Chroma collection with a similarity score threshold.
@@ -418,6 +430,7 @@ def load_retriever(collection_name, score_threshold: float = 0.3):
     return retriever
 
 
+@traceable(name="RAG.generate_answer_from_context")
 def generate_answer_from_context(retriever, question: str, enable_logging: bool = False):
     """
     Ask a question and get an answer based on the provided context.

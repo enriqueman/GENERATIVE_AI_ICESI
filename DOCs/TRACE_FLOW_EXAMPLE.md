@@ -162,3 +162,6 @@ El panel de trazabilidad ahora muestra traces agrupados, permitiendo ver toda la
 
 
 
+
+
+

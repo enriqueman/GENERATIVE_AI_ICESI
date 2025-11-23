@@ -18,6 +18,17 @@ from langchain_core.prompts import ChatPromptTemplate
 import pathlib
 import environ
 
+# Importar traceable para instrumentar funciones
+try:
+    from langsmith import traceable
+    TRACEABLE_AVAILABLE = True
+except ImportError:
+    TRACEABLE_AVAILABLE = False
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # Configurar environment
 env = environ.Env()
 env_path = pathlib.Path(__file__).resolve().parent.parent.parent / '.env'
@@ -41,32 +52,45 @@ except ImportError:
     def check_interview_complete(*args, **kwargs): return False
 
 
-# Estructura del perfil del estudiante
+# Estructura del perfil del estudiante (actualizada según JSON)
 STUDENT_PROFILE_STRUCTURE = {
-    "formacion_academica": {
-        "pregrado": None,  # Carrera de pregrado
-        "universidad": None,  # Universidad de origen
-        "ano_graduacion": None  # Año de graduación
+    "academico": {
+        "titulo_pregrado": None,
+        "universidad": None,
+        "ano_graduacion": None,
+        "posgrados_previos": None,
+        "fortalezas": None
     },
-    "experiencia_laboral": {
-        "anos_experiencia": None,  # Años de experiencia
-        "area_trabajo": None,  # Área de trabajo actual
-        "cargo_actual": None  # Cargo o rol actual
+    "laboral": {
+        "sector": None,
+        "cargo": None,
+        "responsabilidades": None,
+        "anos_experiencia": None,
+        "intencion_cambio": None
+    },
+    "objetivos": {
+        "meta_principal": None,
+        "motivacion": None,
+        "futuro_laboral": None,
+        "enfoque_preferido": None,
+        "enfasis": None
+    },
+    "logistica": {
+        "modalidad_preferida": None,
+        "ubicacion": None,
+        "cambio_residencia": None,
+        "tiempo_estudio": None,
+        "horario_preferido": None
+    },
+    "economia": {
+        "presupuesto": None,
+        "opciones_financiacion": None,
+        "convenios": None
     },
     "intereses": {
-        "areas_interes": [],  # Lista de áreas de interés
-        "objetivos_carrera": None,  # Objetivos profesionales
-        "motivacion": None  # Motivación para el posgrado
-    },
-    "habilidades": {
-        "habilidades_tecnicas": [],  # Lista de habilidades técnicas
-        "habilidades_blandas": [],  # Lista de habilidades blandas
-        "idiomas": []  # Idiomas que maneja
-    },
-    "disponibilidad": {
-        "modalidad": None,  # "tiempo_completo", "tiempo_parcial", "virtual"
-        "horario_preferido": None,  # "diurno", "nocturno", "fines_de_semana"
-        "inicio_deseado": None  # Cuándo desea iniciar
+        "areas": None,
+        "temas_clave": None,
+        "temas_exclusion": None
     },
     "informacion_personal": {
         "nombre": None,
@@ -77,86 +101,21 @@ STUDENT_PROFILE_STRUCTURE = {
 }
 
 
-# Secuencia de preguntas de la entrevista
-INTERVIEW_QUESTIONS = [
-    {
-        "id": "saludo",
-        "question": "¡Hola! Soy el asistente de admisiones de la Universidad ICESI. Estoy aquí para ayudarte a encontrar el posgrado perfecto para ti. Para comenzar, ¿cuál es tu nombre completo?",
-        "field": "informacion_personal.nombre",
-        "validation": "text",
-        "required": True
-    },
-    {
-        "id": "formacion",
-        "question": "Excelente, {nombre}. Cuéntame sobre tu formación académica. ¿Qué carrera de pregrado estudiaste y en qué universidad?",
-        "field": "formacion_academica.pregrado",
-        "field_secondary": "formacion_academica.universidad",
-        "validation": "text",
-        "required": True
-    },
-    {
-        "id": "experiencia",
-        "question": "Perfecto. Ahora háblame de tu experiencia profesional. ¿Cuántos años de experiencia laboral tienes y en qué área trabajas actualmente?",
-        "field": "experiencia_laboral.anos_experiencia",
-        "field_secondary": "experiencia_laboral.area_trabajo",
-        "validation": "text",
-        "required": True
-    },
-    {
-        "id": "intereses",
-        "question": "Me gustaría conocer tus intereses. ¿Qué áreas o temas te apasionan profesionalmente? ¿Hay algún campo específico en el que te gustaría especializarte?",
-        "field": "intereses.areas_interes",
-        "validation": "list",
-        "required": True
-    },
-    {
-        "id": "objetivos",
-        "question": "¿Cuáles son tus objetivos profesionales a mediano y largo plazo? ¿Qué esperas lograr con un posgrado?",
-        "field": "intereses.objetivos_carrera",
-        "field_secondary": "intereses.motivacion",
-        "validation": "text",
-        "required": True
-    },
-    {
-        "id": "habilidades",
-        "question": "¿Qué habilidades técnicas o especializadas posees? Por ejemplo: programación, análisis de datos, gestión de proyectos, marketing digital, etc.",
-        "field": "habilidades.habilidades_tecnicas",
-        "validation": "list",
-        "required": False
-    },
-    {
-        "id": "disponibilidad",
-        "question": "Finalmente, cuéntame sobre tu disponibilidad. ¿Prefieres estudiar tiempo completo, tiempo parcial, o de forma virtual? ¿Qué horario te acomoda mejor?",
-        "field": "disponibilidad.modalidad",
-        "field_secondary": "disponibilidad.horario_preferido",
-        "validation": "text",
-        "required": True
-    },
-    {
-        "id": "contacto",
-        "question": "Para poder enviarte información personalizada, necesito tus datos de contacto. ¿Cuál es tu email y número de teléfono?",
-        "field": "informacion_personal.email",
-        "field_secondary": "informacion_personal.telefono",
-        "validation": "contact",
-        "required": True
-    }
-]
-
-
 class InterviewerAgent:
     """
     Agente entrevistador que recopila información del candidato
-    mediante una conversación estructurada.
+    mediante una conversación estructurada dinámica.
     """
 
     def __init__(self):
         """Inicializar el agente entrevistador"""
         self.llm = None
-        self.current_question_index = 0
+        self.retriever = None
+        self.questions_cache = []
         self._initialize()
 
     def _initialize(self):
-        """Inicializar el modelo de lenguaje"""
+        """Inicializar el modelo de lenguaje y retriever"""
         try:
             api_key = env("OPENAI_API_KEY")
             self.llm = ChatOpenAI(
@@ -165,10 +124,232 @@ class InterviewerAgent:
                 api_key=api_key
             )
             print("[OK] Interviewer Agent initialized with GPT-4o-mini")
+            
+            # Inicializar retriever para preguntas
+            try:
+                from utils.vector_functions import load_retriever, get_combined_retriever
+                # Intentar cargar retriever de preguntas, si no existe usar el combinado
+                try:
+                    self.retriever = load_retriever("interview_questions", score_threshold=0.3)
+                except:
+                    self.retriever = get_combined_retriever(score_threshold=0.3)
+                print("[OK] Retriever initialized for interview questions")
+            except Exception as e:
+                print(f"[WARNING] Could not initialize retriever: {e}")
+                self.retriever = None
+                
         except Exception as e:
             print(f"[WARNING] Could not initialize LLM for Interviewer: {e}")
             self.llm = None
 
+    def _get_questions_from_db(self) -> List[Dict]:
+        """Obtener preguntas desde la base de datos"""
+        try:
+            from models.db import get_interview_question
+            questions = get_interview_question(active_only=True)
+            if not questions:
+                return []
+            
+            # Normalizar formato: asegurar que question_id sea string y agregar 'id' si falta
+            normalized_questions = []
+            for q in questions:
+                q_normalized = dict(q)  # Copia
+                # Asegurar que question_id sea string
+                if "question_id" in q_normalized:
+                    q_normalized["id"] = str(q_normalized["question_id"])
+                elif "id" in q_normalized:
+                    q_normalized["id"] = str(q_normalized["id"])
+                    q_normalized["question_id"] = q_normalized["id"]
+                normalized_questions.append(q_normalized)
+            
+            return normalized_questions
+        except Exception as e:
+            print(f"[WARNING] Error obteniendo preguntas de DB: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def _get_questions_from_rag(self, query: str = "preguntas de entrevista para posgrados", k: int = 20) -> List[Dict]:
+        """Obtener preguntas relevantes desde RAG"""
+        if not self.retriever:
+            return []
+        
+        try:
+            # Usar invoke() si está disponible, sino get_relevant_documents()
+            if hasattr(self.retriever, 'invoke'):
+                docs = self.retriever.invoke(query)
+            elif hasattr(self.retriever, 'get_relevant_documents'):
+                docs = self.retriever.get_relevant_documents(query)
+            else:
+                # Intentar como función callable
+                docs = self.retriever(query)
+            
+            # Asegurar que docs es una lista
+            if not isinstance(docs, list):
+                docs = list(docs) if docs else []
+            
+            questions = []
+            
+            for doc in docs[:k]:
+                metadata = doc.metadata
+                if metadata.get("file_type") == "interview_question":
+                    question_id = metadata.get("question_id", "")
+                    field = metadata.get("field", "")
+                    category = metadata.get("category", "")
+                    validation = metadata.get("validation", "text")
+                    required = metadata.get("required", "True") == "True"
+                    
+                    # Extraer pregunta del contenido
+                    content = doc.page_content
+                    question_match = re.search(r'Pregunta:\s*(.+?)(?:\n|$)', content)
+                    question_text = question_match.group(1).strip() if question_match else content.split("\n")[0]
+                    
+                    # Extraer field_secondary si existe
+                    field_secondary = None
+                    if "Campo secundario:" in content:
+                        sec_match = re.search(r'Campo secundario:\s*(.+?)(?:\n|$)', content)
+                        if sec_match:
+                            field_secondary = sec_match.group(1).strip()
+                    
+                    questions.append({
+                        "id": question_id,
+                        "question": question_text,
+                        "field": field,
+                        "field_secondary": field_secondary,
+                        "validation": validation,
+                        "required": required,
+                        "category": category,
+                        "source": "rag"
+                    })
+            
+            return questions
+        except Exception as e:
+            print(f"[WARNING] Error obteniendo preguntas de RAG: {e}")
+            return []
+
+    def _select_next_question(self, profile: Dict, answered_questions: List[str], session_id: str) -> Optional[Dict]:
+        """
+        Seleccionar la siguiente pregunta dinámicamente usando LLM basado en el perfil actual
+        
+        Args:
+            profile: Perfil actual del estudiante
+            answered_questions: Lista de IDs de preguntas ya respondidas
+            session_id: ID de la sesión
+        
+        Returns:
+            Diccionario con la pregunta seleccionada o None si está completo
+        """
+        # Obtener todas las preguntas disponibles
+        db_questions = self._get_questions_from_db()
+        rag_questions = self._get_questions_from_rag()
+        
+        # Combinar y deduplicar por question_id
+        all_questions = {}
+        for q in db_questions:
+            all_questions[q.get("question_id", "")] = q
+        for q in rag_questions:
+            qid = q.get("id", "")
+            if qid not in all_questions:
+                all_questions[qid] = q
+        
+        # Filtrar preguntas ya respondidas (normalizar a strings para comparación)
+        answered_questions_str = [str(qid) for qid in answered_questions]
+        available_questions = [
+            q for qid, q in all_questions.items() 
+            if str(qid) not in answered_questions_str
+        ]
+        
+        if not available_questions:
+            return None
+        
+        # Si no hay LLM, usar lógica simple: priorizar requeridas no respondidas
+        if not self.llm:
+            # Priorizar preguntas requeridas
+            required_questions = [q for q in available_questions if q.get("required", True)]
+            if required_questions:
+                # Seleccionar por categoría: primero información personal, luego académico, etc.
+                priority_order = ["informacion_personal", "academico", "laboral", "objetivos", "intereses", "logistica", "economia"]
+                for category in priority_order:
+                    for q in required_questions:
+                        field = q.get("field", "")
+                        if field.startswith(category):
+                            return q
+                return required_questions[0]
+            return available_questions[0]
+        
+        # Usar LLM para seleccionar la mejor pregunta
+        try:
+            # Construir contexto del perfil
+            profile_summary = self._profile_to_summary(profile)
+            
+            # Construir lista de preguntas disponibles
+            questions_text = "\n".join([
+                f"- ID: {q.get('id', '')}, Campo: {q.get('field', '')}, Pregunta: {q.get('question', '')[:100]}"
+                for q in available_questions[:15]  # Limitar a 15 para no sobrecargar
+            ])
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """Eres un asistente experto en entrevistas para admisiones de posgrados.
+Tu tarea es seleccionar la mejor pregunta siguiente para hacer al candidato, basándote en:
+1. El perfil actual del candidato
+2. Las preguntas ya respondidas
+3. La importancia de cada pregunta para construir un perfil completo
+
+Responde SOLO con el ID de la pregunta que consideras más apropiada en este momento.
+Si el perfil está completo, responde "COMPLETO"."""),
+                ("user", """Perfil actual del candidato:
+{profile_summary}
+
+Preguntas ya respondidas: {answered_ids}
+
+Preguntas disponibles:
+{questions_text}
+
+¿Cuál es la mejor pregunta siguiente? Responde solo con el ID.""")
+            ])
+            
+            chain = prompt | self.llm
+            # Asegurar que answered_questions son strings
+            answered_ids_str = ", ".join([str(qid) for qid in answered_questions])
+            response = chain.invoke({
+                "profile_summary": profile_summary,
+                "answered_ids": answered_ids_str,
+                "questions_text": questions_text
+            })
+            
+            selected_id = response.content.strip()
+            
+            if selected_id.upper() == "COMPLETO":
+                return None
+            
+            # Buscar la pregunta seleccionada
+            for q in available_questions:
+                if q.get("id", "") == selected_id or q.get("question_id", "") == selected_id:
+                    return q
+            
+            # Si no se encuentra, usar lógica de fallback
+            required_questions = [q for q in available_questions if q.get("required", True)]
+            return required_questions[0] if required_questions else available_questions[0]
+            
+        except Exception as e:
+            print(f"[WARNING] Error seleccionando pregunta con LLM: {e}")
+            # Fallback a lógica simple
+            required_questions = [q for q in available_questions if q.get("required", True)]
+            return required_questions[0] if required_questions else available_questions[0]
+
+    def _profile_to_summary(self, profile: Dict) -> str:
+        """Convertir perfil a texto resumido para el LLM"""
+        parts = []
+        
+        for category, data in profile.items():
+            if isinstance(data, dict):
+                filled_fields = {k: v for k, v in data.items() if v is not None and v != []}
+                if filled_fields:
+                    parts.append(f"{category}: {', '.join([f'{k}={v}' for k, v in filled_fields.items()])}")
+        
+        return "\n".join(parts) if parts else "Perfil vacío"
+
+    @traceable(name="InterviewerAgent.start_interview")
     def start_interview(self, session_id: str = "default_session") -> str:
         """
         Iniciar una nueva entrevista.
@@ -185,7 +366,7 @@ class InterviewerAgent:
         # Inicializar perfil vacío
         profile = STUDENT_PROFILE_STRUCTURE.copy()
         store_interview_data(session_id, "profile", profile)
-        store_interview_data(session_id, "current_question", 0)
+        store_interview_data(session_id, "answered_questions", [])
         store_interview_data(session_id, "completed", False)
 
         # Registrar en tracing
@@ -197,16 +378,30 @@ class InterviewerAgent:
                 level="INFO"
             )
 
-        # Retornar primera pregunta
-        return INTERVIEW_QUESTIONS[0]["question"]
+        # Obtener primera pregunta (saludo/información personal)
+        first_question = self._select_next_question(profile, [], session_id)
+        
+        if first_question:
+            # Guardar pregunta actual para la próxima iteración
+            store_interview_data(session_id, "current_question_data", first_question)
+            
+            # Si no hay pregunta de saludo, usar una genérica
+            question_text = first_question.get("question", "")
+            if not question_text:
+                question_text = "¡Hola! Soy el asistente de admisiones de la Universidad ICESI. Estoy aquí para ayudarte a encontrar el posgrado perfecto para ti. Para comenzar, ¿cuál es tu nombre completo?"
+            return question_text
+        else:
+            return "¡Hola! Soy el asistente de admisiones de la Universidad ICESI. Estoy aquí para ayudarte a encontrar el posgrado perfecto para ti. Para comenzar, ¿cuál es tu nombre completo?"
 
-    def process_answer(self, answer: str, session_id: str = "default_session") -> Dict[str, Any]:
+    @traceable(name="InterviewerAgent.process_answer")
+    def process_answer(self, answer: str, session_id: str = "default_session", current_question_id: str = None) -> Dict[str, Any]:
         """
         Procesar la respuesta del usuario y avanzar en la entrevista.
 
         Args:
             answer: Respuesta del usuario
             session_id: ID de la sesión
+            current_question_id: ID de la pregunta actual (opcional)
 
         Returns:
             {
@@ -218,10 +413,31 @@ class InterviewerAgent:
         """
         try:
             # Obtener estado actual de la entrevista
-            current_index = get_interview_data(session_id, "current_question") or 0
             profile = get_interview_data(session_id, "profile") or STUDENT_PROFILE_STRUCTURE.copy()
+            answered_questions = get_interview_data(session_id, "answered_questions") or []
+            current_question_data = get_interview_data(session_id, "current_question_data") or {}
 
-            if current_index >= len(INTERVIEW_QUESTIONS):
+            # Si no hay current_question_id, intentar obtenerlo de current_question_data
+            if not current_question_id:
+                current_question_id = current_question_data.get("id") or current_question_data.get("question_id")
+
+            # Si aún no hay, buscar la pregunta actual desde las disponibles
+            if not current_question_id:
+                # Obtener todas las preguntas y seleccionar la primera no respondida
+                available = self._select_next_question(profile, answered_questions, session_id)
+                if available:
+                    current_question_id = available.get("id") or available.get("question_id")
+                    current_question_data = available
+
+            # Si no hay pregunta actual, usar la primera disponible
+            if not current_question_data:
+                current_question_data = self._select_next_question(profile, answered_questions, session_id)
+                if current_question_data:
+                    current_question_id = current_question_data.get("id") or current_question_data.get("question_id")
+
+            if not current_question_data:
+                # No hay más preguntas, entrevista completa
+                store_interview_data(session_id, "completed", True)
                 return {
                     "next_question": None,
                     "profile_complete": True,
@@ -229,34 +445,51 @@ class InterviewerAgent:
                     "message": "¡Perfecto! He recopilado toda la información necesaria. Ahora voy a analizar tu perfil para recomendarte los posgrados más adecuados."
                 }
 
-            current_q = INTERVIEW_QUESTIONS[current_index]
-
             # Extraer información de la respuesta
-            extracted_data = self._extract_info_from_answer(answer, current_q, profile)
+            extracted_data = self._extract_info_from_answer(answer, current_question_data, profile)
+            
+            # Debug: Log extracted data
+            if tracer:
+                tracer.log(
+                    operation="DATA_EXTRACTION",
+                    message="Datos extraídos de la respuesta",
+                    metadata={
+                        "answer": answer[:100],
+                        "extracted_data": extracted_data,
+                        "field": current_question_data.get("field", ""),
+                        "question_id": current_question_id
+                    },
+                    level="INFO"
+                )
 
             # Validar respuesta
-            validation_result = self._validate_answer(answer, current_q)
+            validation_result = self._validate_answer(answer, current_question_data)
 
             if not validation_result["valid"]:
                 return {
-                    "next_question": current_q["question"],
+                    "next_question": current_question_data.get("question", ""),
                     "profile_complete": False,
                     "validation_error": validation_result["error"],
                     "extracted_data": None
                 }
 
             # Actualizar perfil con los datos extraídos
-            profile = self._update_profile(profile, extracted_data, current_q)
+            profile = self._update_profile(profile, extracted_data, current_question_data)
 
             # Guardar perfil actualizado
             store_interview_data(session_id, "profile", profile)
 
-            # Avanzar a la siguiente pregunta
-            next_index = current_index + 1
-            store_interview_data(session_id, "current_question", next_index)
+            # Marcar pregunta como respondida (asegurar que sea string)
+            if current_question_id:
+                current_question_id = str(current_question_id)
+                # Convertir answered_questions a strings para comparación
+                answered_questions_str = [str(qid) for qid in answered_questions]
+                if current_question_id not in answered_questions_str:
+                    answered_questions.append(current_question_id)
+                    store_interview_data(session_id, "answered_questions", answered_questions)
 
-            # Verificar si la entrevista está completa
-            if next_index >= len(INTERVIEW_QUESTIONS):
+            # Verificar si el perfil está completo (pasar número de preguntas respondidas)
+            if self._is_profile_complete(profile, len(answered_questions)):
                 store_interview_data(session_id, "completed", True)
 
                 # Registrar en tracing
@@ -275,11 +508,24 @@ class InterviewerAgent:
                     "message": "¡Excelente! He recopilado toda la información necesaria. Ahora voy a analizar tu perfil para recomendarte los posgrados más adecuados para ti."
                 }
 
-            # Obtener siguiente pregunta
-            next_q = INTERVIEW_QUESTIONS[next_index]
+            # Seleccionar siguiente pregunta dinámicamente
+            next_q = self._select_next_question(profile, answered_questions, session_id)
+
+            if not next_q:
+                # No hay más preguntas relevantes
+                store_interview_data(session_id, "completed", True)
+                return {
+                    "next_question": None,
+                    "profile_complete": True,
+                    "extracted_data": profile,
+                    "message": "¡Excelente! He recopilado suficiente información. Ahora voy a analizar tu perfil para recomendarte los posgrados más adecuados para ti."
+                }
+
+            # Guardar pregunta actual para la próxima iteración
+            store_interview_data(session_id, "current_question_data", next_q)
 
             # Personalizar pregunta con el nombre si está disponible
-            next_question = next_q["question"]
+            next_question = next_q.get("question", "")
             if "{nombre}" in next_question and profile.get("informacion_personal", {}).get("nombre"):
                 nombre = profile["informacion_personal"]["nombre"].split()[0]  # Primer nombre
                 next_question = next_question.format(nombre=nombre)
@@ -288,7 +534,7 @@ class InterviewerAgent:
                 "next_question": next_question,
                 "profile_complete": False,
                 "extracted_data": extracted_data,
-                "current_progress": f"{next_index}/{len(INTERVIEW_QUESTIONS)} preguntas completadas"
+                "current_progress": f"{len(answered_questions)} preguntas completadas"
             }
 
         except Exception as e:
@@ -301,6 +547,49 @@ class InterviewerAgent:
                 "profile_complete": False,
                 "error": str(e)
             }
+
+    def _is_profile_complete(self, profile: Dict, answered_questions_count: int = 0) -> bool:
+        """
+        Verificar si el perfil está completo basándose en campos requeridos
+        
+        Args:
+            profile: Perfil del estudiante
+            answered_questions_count: Número de preguntas respondidas
+        
+        Returns:
+            True si el perfil tiene información suficiente
+        """
+        # MÍNIMO: Debe tener al menos 5 preguntas respondidas
+        if answered_questions_count < 5:
+            return False
+        
+        # Verificar información básica crítica
+        has_name = profile.get("informacion_personal", {}).get("nombre") is not None
+        has_academic = profile.get("academico", {}).get("titulo_pregrado") is not None
+        has_laboral = profile.get("laboral", {}).get("sector") is not None
+        has_objetivos = profile.get("objetivos", {}).get("meta_principal") is not None
+        
+        # Si tiene lo básico y al menos 5 preguntas, puede estar completo
+        basic_complete = has_name and has_academic and has_laboral and has_objetivos
+        
+        if not basic_complete:
+            return False
+        
+        # Si tiene lo básico, verificar que tenga al menos información en 3 categorías principales
+        categories_with_data = 0
+        if profile.get("academico", {}).get("titulo_pregrado"):
+            categories_with_data += 1
+        if profile.get("laboral", {}).get("sector"):
+            categories_with_data += 1
+        if profile.get("objetivos", {}).get("meta_principal"):
+            categories_with_data += 1
+        if profile.get("intereses", {}).get("areas"):
+            categories_with_data += 1
+        if profile.get("logistica", {}).get("modalidad_preferida"):
+            categories_with_data += 1
+        
+        # Si tiene al menos 3 categorías con datos y mínimo 5 preguntas, está completo
+        return categories_with_data >= 3
 
     def _extract_info_from_answer(self, answer: str, question_config: Dict, current_profile: Dict) -> Dict[str, Any]:
         """
@@ -316,7 +605,26 @@ class InterviewerAgent:
         """
         if not self.llm:
             # Fallback: extracción simple sin LLM
-            return {"raw_answer": answer}
+            # Intentar extraer información básica del campo
+            field = question_config.get("field", "")
+            validation = question_config.get("validation", "text")
+            
+            # Extracción básica según el tipo
+            if validation == "number":
+                import re
+                numbers = re.findall(r'\d+', answer)
+                value = numbers[0] if numbers else answer
+            elif validation == "list":
+                # Separar por comas o espacios
+                items = [item.strip() for item in answer.replace(",", " ").split() if item.strip()]
+                value = items if items else [answer]
+            else:
+                value = answer.strip()
+            
+            return {
+                "extracted_value": value,
+                "confidence": "low"
+            }
 
         try:
             # Crear prompt para extracción

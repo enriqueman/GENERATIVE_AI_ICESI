@@ -25,14 +25,17 @@ except ImportError:
     LLM_AVAILABLE = False
 
 try:
-    from langsmith import traceable
+    from langsmith import traceable, trace
     TRACEABLE_AVAILABLE = True
+    TRACE_AVAILABLE = True
 except ImportError:
     TRACEABLE_AVAILABLE = False
+    TRACE_AVAILABLE = False
     def traceable(*args, **kwargs):
         def decorator(func):
             return func
         return decorator
+    trace = None
 
 
 class OrchestratorAgent:
@@ -70,6 +73,45 @@ class OrchestratorAgent:
     def is_ready(self):
         """Verificar si el agente está listo"""
         return self.rag_agent.is_ready()
+    
+    def process_query(self, query: str, trace_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> dict:
+        """
+        Procesar una consulta completa: analizar y ejecutar herramientas.
+        Este método envuelve todo en una traza unificada.
+        
+        Args:
+            query: Consulta del usuario
+            trace_id: ID del trace para agrupar logs
+            is_authenticated: Si el usuario está autenticado
+            session_info: Información de sesión
+            
+        Returns:
+            dict: Resultados completos con análisis y ejecución de herramientas
+        """
+        # Crear context manager de traza para agrupar todo
+        if TRACE_AVAILABLE and trace:
+            project_name = os.getenv("LANGCHAIN_PROJECT", "ecomarket-agent")
+            with trace(
+                name="OrchestratorAgent.process_query",
+                project_name=project_name,
+                metadata={"query": query[:200], "trace_id": trace_id}
+            ):
+                return self._process_query_internal(query, trace_id, is_authenticated, session_info)
+        else:
+            return self._process_query_internal(query, trace_id, is_authenticated, session_info)
+    
+    def _process_query_internal(self, query: str, trace_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> dict:
+        """Procesar consulta internamente (sin context manager)"""
+        # Analizar consulta
+        analysis = self.analyze_query(query, trace_id, is_authenticated, session_info)
+        
+        # Ejecutar herramientas
+        tool_results = self.execute_tools(analysis, query, trace_id, session_info)
+        
+        return {
+            "analysis": analysis,
+            "tool_results": tool_results
+        }
     
     @traceable(name="OrchestratorAgent.analyze_query")
     def analyze_query(self, query: str, trace_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> dict:
@@ -280,8 +322,25 @@ class OrchestratorAgent:
                 "requires_additional_info": False
             }
     
-    @traceable(name="OrchestratorAgent.execute_tools")
     def execute_tools(self, analysis: dict, query: str, trace_id: str = None, session_info: dict = None) -> dict:
+        """
+        Ejecutar las herramientas necesarias según el análisis.
+        
+        Args:
+            analysis: Resultado del análisis de reasoning
+            query: Consulta original del usuario
+            trace_id: ID del trace para agrupar logs
+            session_info: Información de sesión (email, name) si el usuario está autenticado
+            
+        Returns:
+            dict: Resultados de las herramientas
+        """
+        # Llamar directamente a _execute_tools_internal que tiene el decorador @traceable
+        # El context manager de process_query() agrupará todas las trazas
+        return self._execute_tools_internal(analysis, query, trace_id, session_info)
+    
+    @traceable(name="OrchestratorAgent.execute_tools")
+    def _execute_tools_internal(self, analysis: dict, query: str, trace_id: str = None, session_info: dict = None) -> dict:
         """
         Ejecutar las herramientas necesarias según el análisis.
         

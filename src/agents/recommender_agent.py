@@ -19,6 +19,17 @@ from langchain_core.prompts import ChatPromptTemplate
 import pathlib
 import environ
 
+# Importar traceable para instrumentar funciones
+try:
+    from langsmith import traceable
+    TRACEABLE_AVAILABLE = True
+except ImportError:
+    TRACEABLE_AVAILABLE = False
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # Configurar environment
 env = environ.Env()
 env_path = pathlib.Path(__file__).resolve().parent.parent.parent / '.env'
@@ -67,6 +78,7 @@ class RecommenderAgent:
             self.llm = None
             self.retriever = None
 
+    @traceable(name="RecommenderAgent.generate_recommendation")
     def generate_recommendation(
         self,
         profiler_results: Dict[str, Any],
@@ -152,7 +164,7 @@ Programa {i}: {match['program_name']}
 Tu tarea es generar una recomendación PERSONALIZADA, CÁLIDA y PROFESIONAL para un candidato a posgrado.
 
 ESTRUCTURA DE TU RESPUESTA:
-1. Saludo personalizado mencionando el nombre del candidato
+1. Saludo personalizado mencionando el nombre del candidato (SIEMPRE usa el nombre, nunca "None")
 2. Resumen breve de su perfil (2-3 oraciones)
 3. Presentación de los 3 programas recomendados:
    - Para cada programa:
@@ -170,16 +182,18 @@ TONO:
 - Evita ser genérico
 
 IMPORTANTE:
+- SIEMPRE usa el nombre del candidato en el saludo, NUNCA uses "None" o "Estudiante" si hay nombre disponible
 - NO inventes información sobre los programas
 - NO menciones precios específicos (eso viene después)
 - Sé específico sobre por qué cada programa es adecuado
 - Máximo 400 palabras"""),
                 ("user", """Candidato: {profile_summary}
+Nombre: {nombre}
 
 Programas analizados:
 {programs_info}
 
-Genera una recomendación personalizada y motivadora.""")
+Genera una recomendación personalizada y motivadora. SIEMPRE usa el nombre del candidato en el saludo.""")
             ])
 
             # Generar recomendación
@@ -260,8 +274,16 @@ Este programa destaca por su alto nivel de afinidad con tu perfil ({top_program[
             top_program = top_matches[0]
             query = f"Información sobre {top_program['program_name']}: inversión, duración, requisitos, contacto"
 
-            # Consultar RAG
-            docs = self.retriever.get_relevant_documents(query)
+            # Consultar RAG - usar método disponible
+            if hasattr(self.retriever, 'invoke'):
+                docs = self.retriever.invoke(query)
+            elif hasattr(self.retriever, 'get_relevant_documents'):
+                docs = self.retriever.get_relevant_documents(query)
+            else:
+                docs = self.retriever(query) if callable(self.retriever) else []
+            
+            if not isinstance(docs, list):
+                docs = list(docs) if docs else []
 
             if docs:
                 # Extraer información relevante

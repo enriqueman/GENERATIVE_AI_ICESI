@@ -19,6 +19,17 @@ from langchain_core.prompts import ChatPromptTemplate
 import pathlib
 import environ
 
+# Importar traceable para instrumentar funciones
+try:
+    from langsmith import traceable
+    TRACEABLE_AVAILABLE = True
+except ImportError:
+    TRACEABLE_AVAILABLE = False
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # Configurar environment
 env = environ.Env()
 env_path = pathlib.Path(__file__).resolve().parent.parent.parent / '.env'
@@ -37,61 +48,9 @@ except ImportError as e:
     def get_interview_data(*args, **kwargs): return {}
 
 
-# Criterios de matching por programa
-PROGRAM_CRITERIA = {
-    "maestria_ciencia_datos": {
-        "keywords": [
-            "datos", "data", "estadística", "machine learning", "inteligencia artificial",
-            "python", "programación", "análisis", "big data", "ia", "ml"
-        ],
-        "required_background": ["ingeniería", "sistemas", "matemáticas", "estadística", "computación"],
-        "weight_factors": {
-            "formacion_tecnica": 0.35,
-            "experiencia_datos": 0.25,
-            "habilidades_programacion": 0.20,
-            "interes_ia_ml": 0.20
-        }
-    },
-    "mba_administracion": {
-        "keywords": [
-            "administración", "gerencia", "gestión", "liderazgo", "negocios",
-            "estrategia", "finanzas", "marketing", "emprendimiento", "management"
-        ],
-        "required_background": [],  # Acepta cualquier formación
-        "weight_factors": {
-            "experiencia_gerencial": 0.30,
-            "liderazgo": 0.25,
-            "vision_estrategica": 0.25,
-            "anos_experiencia": 0.20
-        }
-    },
-    "maestria_ingenieria_software": {
-        "keywords": [
-            "software", "programación", "desarrollo", "arquitectura", "devops",
-            "sistemas", "aplicaciones", "backend", "frontend", "cloud", "microservicios"
-        ],
-        "required_background": ["ingeniería", "sistemas", "software", "computación"],
-        "weight_factors": {
-            "experiencia_desarrollo": 0.35,
-            "conocimiento_tecnologias": 0.30,
-            "arquitectura_software": 0.20,
-            "interes_tecnologia": 0.15
-        }
-    },
-    "maestria_marketing_digital": {
-        "keywords": [
-            "marketing", "digital", "redes sociales", "publicidad", "contenido",
-            "seo", "sem", "analytics", "e-commerce", "comunicación", "ventas"
-        ],
-        "required_background": [],  # Acepta cualquier formación
-        "weight_factors": {
-            "experiencia_marketing": 0.30,
-            "habilidades_digitales": 0.25,
-            "creatividad": 0.20,
-            "interes_comunicacion": 0.25
-        }
-    }
-}
+# Criterios de matching por programa (ahora se obtienen dinámicamente del RAG)
+# Este diccionario se usa como fallback si no hay RAG disponible
+PROGRAM_CRITERIA = {}
 
 
 class ProfilerAgent:
@@ -116,15 +75,24 @@ class ProfilerAgent:
             )
             print("[OK] Profiler Agent initialized with GPT-4o-mini")
 
-            # Inicializar retriever
-            self.retriever = get_combined_retriever(score_threshold=0.3)
-            print("[OK] Vector retriever initialized")
+            # Inicializar retriever - intentar cargar programas primero, luego combinado
+            try:
+                self.retriever = load_retriever("posgrado_programs", score_threshold=0.3)
+                print("[OK] Program retriever initialized")
+            except:
+                try:
+                    self.retriever = get_combined_retriever(score_threshold=0.3)
+                    print("[OK] Combined retriever initialized")
+                except:
+                    self.retriever = None
+                    print("[WARNING] Could not initialize retriever")
 
         except Exception as e:
             print(f"[WARNING] Could not initialize Profiler Agent: {e}")
             self.llm = None
             self.retriever = None
 
+    @traceable(name="ProfilerAgent.analyze_profile")
     def analyze_profile(self, student_profile: Dict[str, Any], session_id: str = "default_session") -> Dict[str, Any]:
         """
         Analizar el perfil del estudiante y calcular matches con posgrados.
@@ -156,14 +124,56 @@ class ProfilerAgent:
 
             # Paso 1: Extraer características clave del perfil
             profile_features = self._extract_profile_features(student_profile)
+            
+            # Debug: Log del perfil extraído
+            if tracer:
+                tracer.log(
+                    operation="PROFILE_FEATURES_EXTRACTED",
+                    message="Características del perfil extraídas",
+                    metadata={
+                        "formacion": profile_features.get("formacion", ""),
+                        "area_trabajo": profile_features.get("area_trabajo", ""),
+                        "intereses": profile_features.get("intereses", []),
+                        "objetivos": profile_features.get("objetivos", ""),
+                        "anos_experiencia": profile_features.get("anos_experiencia", 0)
+                    },
+                    level="INFO"
+                )
 
-            # Paso 2: Calcular scores para cada programa
-            program_scores = self._calculate_program_scores(profile_features, student_profile)
+            # Paso 2: Obtener TODOS los programas disponibles desde RAG basados en el perfil
+            all_programs = self._get_all_programs_from_rag(profile_features)
+            
+            if tracer:
+                tracer.log(
+                    operation="PROGRAMS_RETRIEVED_FROM_RAG",
+                    message=f"Programas recuperados desde RAG: {len(all_programs)}",
+                    metadata={"program_count": len(all_programs)},
+                    level="INFO"
+                )
+            
+            # Paso 3: Calcular scores para cada programa basado en el perfil
+            if all_programs:
+                program_scores = self._calculate_program_scores_rag(all_programs, profile_features, student_profile)
+            else:
+                # Fallback a método antiguo si no hay programas en RAG
+                print("[WARNING] No se encontraron programas en RAG, usando método fallback")
+                program_scores = self._calculate_program_scores(profile_features, student_profile)
 
-            # Paso 3: Rankear programas
+            # Paso 4: Rankear programas
             ranked_programs = sorted(program_scores, key=lambda x: x["score"], reverse=True)
+            
+            if tracer:
+                tracer.log(
+                    operation="PROGRAMS_RANKED",
+                    message=f"Programas rankeados: {len(ranked_programs)}",
+                    metadata={
+                        "top_3_scores": [p["score"] for p in ranked_programs[:3]],
+                        "top_3_names": [p["program_name"] for p in ranked_programs[:3]]
+                    },
+                    level="INFO"
+                )
 
-            # Paso 4: Obtener detalles de los top 3 programas usando RAG
+            # Paso 5: Obtener detalles de los top 3 programas
             top_matches = self._enrich_top_matches(ranked_programs[:3], profile_features)
 
             # Paso 5: Generar resumen del perfil
@@ -207,19 +217,67 @@ class ProfilerAgent:
         Returns:
             Diccionario con características extraídas
         """
+        # Nueva estructura: academico, laboral, objetivos, intereses, logistica, economia
+        academico = profile.get("academico", {})
+        laboral = profile.get("laboral", {})
+        intereses = profile.get("intereses", {})
+        objetivos = profile.get("objetivos", {})
+        logistica = profile.get("logistica", {})
+        
+        # Compatibilidad con estructura antigua
+        formacion_academica = profile.get("formacion_academica", {})
+        experiencia_laboral = profile.get("experiencia_laboral", {})
+        disponibilidad = profile.get("disponibilidad", {})
+        habilidades = profile.get("habilidades", {})
+        
         features = {
-            "formacion": profile.get("formacion_academica", {}).get("pregrado", "").lower(),
-            "universidad": profile.get("formacion_academica", {}).get("universidad", "").lower(),
-            "anos_experiencia": self._extract_years_experience(profile.get("experiencia_laboral", {})),
-            "area_trabajo": profile.get("experiencia_laboral", {}).get("area_trabajo", "").lower(),
-            "intereses": [i.lower() for i in profile.get("intereses", {}).get("areas_interes", [])],
-            "objetivos": profile.get("intereses", {}).get("objetivos_carrera", "").lower(),
-            "habilidades_tecnicas": [h.lower() for h in profile.get("habilidades", {}).get("habilidades_tecnicas", [])],
-            "modalidad_preferida": profile.get("disponibilidad", {}).get("modalidad", "").lower(),
+            "formacion": (academico.get("titulo_pregrado") or formacion_academica.get("pregrado") or "").lower(),
+            "universidad": (academico.get("universidad") or formacion_academica.get("universidad") or "").lower(),
+            "anos_experiencia": self._extract_years_experience(laboral or experiencia_laboral),
+            "area_trabajo": (laboral.get("sector") or experiencia_laboral.get("area_trabajo") or "").lower(),
+            "intereses": self._extract_interests(intereses),
+            "objetivos": (objetivos.get("meta_principal") or intereses.get("objetivos_carrera") or "").lower(),
+            "habilidades_tecnicas": self._extract_skills(habilidades, academico),
+            "modalidad_preferida": (logistica.get("modalidad_preferida") or disponibilidad.get("modalidad") or "").lower(),
             "all_text": self._profile_to_text(profile)
         }
 
         return features
+
+    def _extract_interests(self, intereses: Dict) -> List[str]:
+        """Extraer intereses del perfil"""
+        areas = intereses.get("areas", [])
+        if isinstance(areas, str):
+            areas = [a.strip() for a in areas.split(",") if a.strip()]
+        elif not isinstance(areas, list):
+            areas = []
+        
+        # Compatibilidad con estructura antigua
+        if not areas:
+            old_areas = intereses.get("areas_interes", [])
+            if isinstance(old_areas, str):
+                areas = [a.strip() for a in old_areas.split(",") if a.strip()]
+            elif isinstance(old_areas, list):
+                areas = old_areas
+        
+        return [i.lower() for i in areas if i]
+
+    def _extract_skills(self, habilidades: Dict, academico: Dict) -> List[str]:
+        """Extraer habilidades técnicas"""
+        skills = habilidades.get("habilidades_tecnicas", [])
+        if isinstance(skills, str):
+            skills = [s.strip() for s in skills.split(",") if s.strip()]
+        elif not isinstance(skills, list):
+            skills = []
+        
+        # Agregar fortalezas académicas
+        fortalezas = academico.get("fortalezas")
+        if fortalezas:
+            if isinstance(fortalezas, str):
+                fortalezas_list = [f.strip() for f in fortalezas.split(",") if f.strip()]
+                skills.extend(fortalezas_list)
+        
+        return [s.lower() for s in skills if s]
 
     def _extract_years_experience(self, experiencia: Dict) -> int:
         """Extraer años de experiencia del perfil"""
@@ -237,29 +295,63 @@ class ProfilerAgent:
         """Convertir perfil a texto para análisis"""
         text_parts = []
 
-        # Formación
-        formacion = profile.get("formacion_academica", {})
-        if formacion.get("pregrado"):
-            text_parts.append(f"Estudió {formacion.get('pregrado')}")
+        # Formación (nueva estructura: academico)
+        academico = profile.get("academico", {})
+        formacion_academica = profile.get("formacion_academica", {})  # Compatibilidad
+        
+        titulo = academico.get("titulo_pregrado") or formacion_academica.get("pregrado")
+        if titulo:
+            text_parts.append(f"Estudió {titulo}")
+        
+        universidad = academico.get("universidad") or formacion_academica.get("universidad")
+        if universidad:
+            text_parts.append(f"en {universidad}")
 
-        # Experiencia
-        experiencia = profile.get("experiencia_laboral", {})
-        if experiencia.get("area_trabajo"):
-            text_parts.append(f"Trabaja en {experiencia.get('area_trabajo')}")
+        # Experiencia (nueva estructura: laboral)
+        laboral = profile.get("laboral", {})
+        experiencia_laboral = profile.get("experiencia_laboral", {})  # Compatibilidad
+        
+        sector = laboral.get("sector") or experiencia_laboral.get("area_trabajo")
+        if sector:
+            text_parts.append(f"Trabaja en {sector}")
+        
+        cargo = laboral.get("cargo")
+        if cargo:
+            text_parts.append(f"como {cargo}")
 
         # Intereses
         intereses = profile.get("intereses", {})
-        if intereses.get("areas_interes"):
-            text_parts.append(f"Interesado en {', '.join(intereses.get('areas_interes', []))}")
+        areas = intereses.get("areas", [])
+        if isinstance(areas, str):
+            areas = [a.strip() for a in areas.split(",") if a.strip()]
+        elif isinstance(areas, list):
+            areas = [a for a in areas if a]
+        
+        # Compatibilidad con estructura antigua
+        if not areas:
+            old_areas = intereses.get("areas_interes", [])
+            if isinstance(old_areas, list):
+                areas = old_areas
+        
+        if areas:
+            text_parts.append(f"Interesado en {', '.join(areas)}")
 
         # Objetivos
-        if intereses.get("objetivos_carrera"):
-            text_parts.append(f"Objetivos: {intereses.get('objetivos_carrera')}")
+        objetivos = profile.get("objetivos", {})
+        meta = objetivos.get("meta_principal") or intereses.get("objetivos_carrera")
+        if meta:
+            text_parts.append(f"Objetivos: {meta}")
 
         # Habilidades
         habilidades = profile.get("habilidades", {})
-        if habilidades.get("habilidades_tecnicas"):
-            text_parts.append(f"Habilidades: {', '.join(habilidades.get('habilidades_tecnicas', []))}")
+        skills = habilidades.get("habilidades_tecnicas", [])
+        if isinstance(skills, str):
+            skills = [s.strip() for s in skills.split(",") if s.strip()]
+        elif isinstance(skills, list):
+            skills = [s for s in skills if s]
+        
+        if skills:
+            text_parts.append(f"Habilidades: {', '.join(skills)}")
 
         return ". ".join(text_parts)
 
@@ -443,7 +535,16 @@ Programa: {program}
                 # Consultar RAG para obtener detalles del programa
                 if self.retriever:
                     query = f"Información sobre {program['program_name']} requisitos inversión"
-                    docs = self.retriever.get_relevant_documents(query)
+                    # Usar método disponible del retriever
+                    if hasattr(self.retriever, 'invoke'):
+                        docs = self.retriever.invoke(query)
+                    elif hasattr(self.retriever, 'get_relevant_documents'):
+                        docs = self.retriever.get_relevant_documents(query)
+                    else:
+                        docs = self.retriever(query) if callable(self.retriever) else []
+                    
+                    if not isinstance(docs, list):
+                        docs = list(docs) if docs else []
 
                     if docs:
                         program["rag_info"] = docs[0].page_content[:500]  # Primeros 500 caracteres
@@ -458,25 +559,327 @@ Programa: {program}
 
     def _generate_profile_summary(self, profile: Dict, features: Dict) -> str:
         """Generar un resumen del perfil del estudiante"""
-        nombre = profile.get("informacion_personal", {}).get("nombre", "Estudiante")
-        formacion = features["formacion"]
+        # Obtener nombre - verificar múltiples fuentes y evitar "None"
+        nombre = (
+            profile.get("informacion_personal", {}).get("nombre") or
+            "Estudiante"
+        )
+        
+        # Si nombre es None o vacío, usar "Estudiante"
+        if not nombre or nombre == "None" or str(nombre).strip() == "":
+            nombre = "Estudiante"
+        
+        formacion = features["formacion"] or "formación profesional"
         anos = features["anos_experiencia"]
         intereses = ", ".join(features["intereses"][:3]) if features["intereses"] else "diversos campos"
+        
+        # Obtener objetivos
+        objetivos = profile.get("objetivos", {})
+        meta = objetivos.get("meta_principal", "")
+        if not meta:
+            meta = profile.get("intereses", {}).get("objetivos_carrera", "")
 
-        summary = f"{nombre} es un profesional con formación en {formacion} y {anos} años de experiencia. "
-        summary += f"Sus principales intereses incluyen {intereses}."
+        summary = f"{nombre} es un profesional con formación en {formacion}"
+        if anos > 0:
+            summary += f" y {anos} años de experiencia"
+        summary += ". "
+        
+        if intereses and intereses != "diversos campos":
+            summary += f"Sus principales intereses incluyen {intereses}. "
+        
+        if meta:
+            summary += f"Su objetivo principal es {meta}."
 
         return summary
 
+    @traceable(name="ProfilerAgent._get_all_programs_from_rag")
+    def _get_all_programs_from_rag(self, features: Dict) -> List[Dict]:
+        """
+        Obtener TODOS los programas disponibles desde RAG basados en el perfil del estudiante.
+        
+        Args:
+            features: Características del perfil
+        
+        Returns:
+            Lista de programas con su información
+        """
+        if not self.retriever:
+            return []
+        
+        try:
+            # Construir query basada en el perfil completo
+            query_parts = []
+            
+            # Agregar información académica
+            if features.get("formacion"):
+                query_parts.append(f"formación {features['formacion']}")
+            if features.get("universidad"):
+                query_parts.append(f"universidad {features['universidad']}")
+            
+            # Agregar información laboral
+            if features.get("area_trabajo"):
+                query_parts.append(f"sector {features['area_trabajo']}")
+            if features.get("anos_experiencia", 0) > 0:
+                query_parts.append(f"experiencia {features['anos_experiencia']} años")
+            
+            # Agregar intereses
+            if features.get("intereses"):
+                query_parts.extend(features["intereses"][:5])  # Más intereses
+            
+            # Agregar objetivos
+            if features.get("objetivos"):
+                query_parts.append(features["objetivos"])
+            
+            # Agregar habilidades técnicas
+            if features.get("habilidades_tecnicas"):
+                query_parts.extend(features["habilidades_tecnicas"][:3])
+            
+            # Construir query completa
+            if query_parts:
+                query = "programas de posgrado " + " ".join(query_parts[:10])  # Más términos
+            else:
+                query = "programas de posgrado maestría especialización MBA"
+            
+            print(f"[DEBUG] Query para RAG: {query[:200]}")
+            
+            # Obtener documentos - usar invoke() o método disponible
+            if hasattr(self.retriever, 'invoke'):
+                docs = self.retriever.invoke(query)
+            elif hasattr(self.retriever, 'get_relevant_documents'):
+                docs = self.retriever.get_relevant_documents(query)
+            else:
+                docs = self.retriever(query) if callable(self.retriever) else []
+            
+            if not isinstance(docs, list):
+                docs = list(docs) if docs else []
+            
+            print(f"[DEBUG] Documentos recuperados de RAG: {len(docs)}")
+            
+            # Extraer programas únicos de la colección posgrado_programs
+            programs = {}
+            for doc in docs:
+                metadata = doc.metadata
+                # Buscar programas con etiqueta específica
+                if (metadata.get("source_type") == "posgrado_program" or 
+                    metadata.get("program_tag") == "programa_posgrado" or
+                    "programa" in metadata.get("source", "").lower()):
+                    
+                    program_name = metadata.get("program_name", "")
+                    if not program_name:
+                        # Intentar extraer del source
+                        source = metadata.get("source", "")
+                        if source:
+                            import os
+                            filename = os.path.basename(source)
+                            program_name = filename.replace(".pdf", "").replace(".txt", "").replace("_", " ").title()
+                    
+                    if program_name and program_name not in programs:
+                        # Extraer áreas temáticas
+                        areas = []
+                        if metadata.get("areas_tematicas"):
+                            if isinstance(metadata["areas_tematicas"], str):
+                                areas = [a.strip() for a in metadata["areas_tematicas"].split(",") if a.strip()]
+                            elif isinstance(metadata["areas_tematicas"], list):
+                                areas = metadata["areas_tematicas"]
+                        
+                        programs[program_name] = {
+                            "program_name": program_name,
+                            "program_type": metadata.get("program_type", "maestria"),
+                            "content": doc.page_content,
+                            "metadata": metadata,
+                            "areas_tematicas": areas
+                        }
+            
+            print(f"[DEBUG] Programas únicos encontrados: {len(programs)}")
+            
+            # Si no se encontraron programas específicos, buscar en sample_documents también
+            if not programs:
+                # Intentar buscar en sample_documents
+                try:
+                    from utils.vector_functions import load_retriever
+                    sample_retriever = load_retriever("sample_documents", score_threshold=0.3)
+                    if hasattr(sample_retriever, 'invoke'):
+                        sample_docs = sample_retriever.invoke(query)
+                    elif hasattr(sample_retriever, 'get_relevant_documents'):
+                        sample_docs = sample_retriever.get_relevant_documents(query)
+                    else:
+                        sample_docs = sample_retriever(query) if callable(sample_retriever) else []
+                    
+                    if not isinstance(sample_docs, list):
+                        sample_docs = list(sample_docs) if sample_docs else []
+                    
+                    # Extraer programas de sample_documents
+                    for doc in sample_docs[:20]:  # Limitar a 20
+                        source = doc.metadata.get("source", "")
+                        if "maestria" in source.lower() or "mba" in source.lower():
+                            # Extraer nombre del archivo
+                            import os
+                            filename = os.path.basename(source)
+                            program_name = filename.replace(".pdf", "").replace(".txt", "").replace("_", " ").title()
+                            
+                            if program_name and program_name not in programs:
+                                programs[program_name] = {
+                                    "program_name": program_name,
+                                    "program_type": "maestria" if "maestria" in filename.lower() else "mba",
+                                    "content": doc.page_content,
+                                    "metadata": doc.metadata,
+                                    "areas_tematicas": []
+                                }
+                except Exception as e:
+                    print(f"[WARNING] Error buscando en sample_documents: {e}")
+            
+            return list(programs.values())
+            
+        except Exception as e:
+            print(f"[WARNING] Error obteniendo programas de RAG: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def _calculate_program_scores_rag(self, programs: List[Dict], features: Dict, full_profile: Dict) -> List[Dict]:
+        """
+        Calcular scores de afinidad para programas obtenidos desde RAG.
+        
+        Args:
+            programs: Lista de programas desde RAG
+            features: Características del perfil
+            full_profile: Perfil completo
+        
+        Returns:
+            Lista de programas con sus scores
+        """
+        program_scores = []
+        
+        for program in programs:
+            program_name = program.get("program_name", "Programa desconocido")
+            program_content = program.get("content", "").lower()
+            program_areas = program.get("areas_tematicas", [])
+            
+            score = 0.0
+            reasons = []
+            
+            # 1. Match de keywords en el contenido (40%)
+            profile_text = features.get("all_text", "").lower()
+            intereses_text = " ".join(features.get("intereses", [])).lower()
+            objetivos_text = features.get("objetivos", "").lower()
+            formacion_text = features.get("formacion", "").lower()
+            area_trabajo_text = features.get("area_trabajo", "").lower()
+            habilidades_text = " ".join(features.get("habilidades_tecnicas", [])).lower()
+            
+            combined_profile = f"{profile_text} {intereses_text} {objetivos_text} {formacion_text} {area_trabajo_text} {habilidades_text}"
+            
+            # Buscar coincidencias de palabras clave del perfil en el contenido del programa
+            # Filtrar palabras muy comunes
+            common_words = {"programa", "maestria", "especializacion", "universidad", "estudiante", "perfil", "años", "año", "curso", "cursos"}
+            profile_words = set([w for w in combined_profile.split() if len(w) > 3 and w not in common_words])
+            program_words = set([w for w in program_content.split() if len(w) > 3 and w not in common_words])
+            
+            matches = profile_words.intersection(program_words)
+            # Ajustar cálculo: más matches = mejor score, pero con límite razonable
+            keyword_score = min(1.0, len(matches) / max(1, min(len(profile_words) * 0.15, 20)))
+            score += keyword_score * 0.40
+            if matches:
+                match_list = list(matches)[:3]
+                reasons.append(f"Tu perfil coincide con temas del programa: {', '.join(match_list)}")
+            
+            # 2. Match de áreas temáticas (30%)
+            area_score = 0.0
+            if program_areas:
+                intereses = features["intereses"]
+                if intereses:
+                    # Buscar matches entre áreas del programa e intereses del perfil
+                    area_matches = []
+                    for area in program_areas:
+                        area_lower = area.lower()
+                        for interes in intereses:
+                            interes_lower = interes.lower()
+                            # Match si el área contiene el interés o viceversa
+                            if interes_lower in area_lower or area_lower in interes_lower:
+                                area_matches.append(area)
+                                break
+                    
+                    area_score = min(1.0, len(area_matches) / max(1, len(program_areas)))
+                    score += area_score * 0.30
+                    if area_matches:
+                        reasons.append(f"El programa cubre tus áreas de interés: {', '.join(area_matches[:2])}")
+                else:
+                    score += 0.15  # Score parcial si no hay intereses definidos
+            else:
+                score += 0.10  # Score mínimo si no hay áreas definidas
+            
+            # 3. Match de formación/experiencia (20%)
+            formacion = features.get("formacion", "")
+            area_trabajo = features.get("area_trabajo", "")
+            anos_exp = features.get("anos_experiencia", 0)
+            
+            formacion_match = False
+            if formacion:
+                # Buscar palabras clave de la formación en el contenido
+                formacion_keywords = formacion.split()
+                for keyword in formacion_keywords:
+                    if len(keyword) > 4 and keyword in program_content:
+                        formacion_match = True
+                        break
+            
+            if formacion_match:
+                score += 0.20
+                reasons.append(f"Tu formación en {formacion} es relevante para este programa")
+            elif area_trabajo:
+                # Buscar área de trabajo en el contenido
+                area_keywords = area_trabajo.split()
+                for keyword in area_keywords:
+                    if len(keyword) > 4 and keyword in program_content:
+                        score += 0.15
+                        reasons.append(f"Tu experiencia en {area_trabajo} es relevante")
+                        break
+                else:
+                    score += 0.05  # Score mínimo
+            else:
+                score += 0.05  # Score mínimo
+            
+            # Bonus por años de experiencia si es relevante
+            if anos_exp >= 3:
+                score += 0.05
+            
+            # 4. Match de modalidad (10%)
+            modalidad = features.get("modalidad_preferida", "")
+            if modalidad and modalidad in program_content:
+                score += 0.10
+                reasons.append(f"El programa ofrece modalidad {modalidad}")
+            else:
+                score += 0.05
+            
+            # Normalizar score a 0-100
+            final_score = min(100, max(0, score * 100))
+            
+            program_scores.append({
+                "program_id": program_name.lower().replace(" ", "_"),
+                "program_name": program_name,
+                "score": round(final_score, 2),
+                "reasons": reasons[:5] if reasons else ["Programa disponible en ICESI"],
+                "details": {
+                    "keyword_match": round(keyword_score * 40, 2),
+                    "area_match": round(area_score * 30, 2) if program_areas else 0,
+                    "content_preview": program_content[:200]
+                }
+            })
+        
+        return program_scores
+
     def _get_program_display_name(self, program_id: str) -> str:
         """Obtener nombre legible del programa"""
+        # Si ya es un nombre legible, retornarlo
+        if " " in program_id or program_id[0].isupper():
+            return program_id
+        
+        # Mapeo de fallback
         names = {
             "maestria_ciencia_datos": "Maestría en Ciencia de Datos",
             "mba_administracion": "MBA - Administración",
             "maestria_ingenieria_software": "Maestría en Ingeniería de Software",
             "maestria_marketing_digital": "Maestría en Marketing Digital y Analítica"
         }
-        return names.get(program_id, program_id)
+        return names.get(program_id, program_id.replace("_", " ").title())
 
 
 # Singleton instance

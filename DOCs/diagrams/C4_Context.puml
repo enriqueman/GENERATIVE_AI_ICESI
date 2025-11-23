@@ -1,0 +1,26 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Diagrama de Contexto - Sistema de Recomendación de Posgrados ICESI
+
+Person(estudiante, "Estudiante Prospectivo", "Estudiante interesado en programas de posgrado de la Universidad ICESI")
+Person(admin, "Administrador", "Personal administrativo que gestiona el sistema")
+
+System(sistema_recomendacion, "Sistema de Recomendación de Posgrados ICESI", "Sistema inteligente que recomienda programas de posgrado basado en el perfil del estudiante")
+
+System_Ext(openai, "OpenAI API", "Proveedor de servicios de IA: embeddings y LLM (GPT-4o-mini)")
+System_Ext(smtp, "Servidor SMTP", "Servidor de correo electrónico para envío de códigos OTP")
+System_Ext(google_oauth, "Google OAuth", "Servicio de autenticación de Google")
+System_Ext(langsmith, "LangSmith", "Plataforma de observabilidad y trazabilidad para aplicaciones LLM (opcional)")
+
+Rel(estudiante, sistema_recomendacion, "Consulta información sobre posgrados", "HTTPS")
+Rel(admin, sistema_recomendacion, "Gestiona configuración y documentos", "HTTPS")
+Rel(sistema_recomendacion, openai, "Obtiene embeddings y genera respuestas", "HTTPS/API")
+Rel(sistema_recomendacion, smtp, "Envía códigos OTP por email", "SMTP")
+Rel(sistema_recomendacion, google_oauth, "Autentica usuarios con Google", "OAuth 2.0")
+Rel(sistema_recomendacion, langsmith, "Envía trazas y métricas", "HTTPS/API")
+
+@enduml
+

@@ -1,0 +1,50 @@
+@startuml C4_Component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Diagrama de Componentes - Backend Python
+
+Container(web_app, "Aplicación Web", "Streamlit", "Interfaz de usuario")
+ContainerDb(sqlite, "Base de Datos SQLite", "SQLite", "Metadatos")
+ContainerDb(chromadb, "Base de Datos Vectorial", "ChromaDB", "Vectores")
+System_Ext(openai, "OpenAI API", "IA")
+
+Container_Boundary(backend, "Backend Python") {
+    Component(intelligent_agent, "Intelligent Agent", "Python", "Coordina el flujo completo del sistema")
+    Component(interviewer_agent, "Interviewer Agent", "Python", "Recopila información del estudiante mediante entrevista")
+    Component(profiler_agent, "Profiler Agent", "Python", "Analiza perfil y calcula matches con programas")
+    Component(recommender_agent, "Recommender Agent", "Python", "Genera recomendaciones personalizadas")
+    Component(rag_agent, "RAG Agent", "Python", "Búsqueda semántica en documentos")
+    
+    Component(otp_auth, "OTP Auth", "Python", "Autenticación mediante códigos OTP")
+    Component(google_auth, "Google Auth", "Python", "Autenticación con Google OAuth")
+    Component(document_retriever, "Document Retriever", "Python", "Recupera documentos relevantes")
+    Component(query_processor, "Query Processor", "Python", "Procesa y clasifica consultas")
+    Component(chat_memory, "Chat Memory", "Python", "Gestiona memoria de conversación")
+    
+    Component(db_model, "DB Model", "Python", "Acceso a base de datos SQLite")
+    Component(vector_functions, "Vector Functions", "Python", "Operaciones con ChromaDB")
+    Component(tracing, "Tracing", "Python", "Sistema de trazabilidad")
+}
+
+Rel(web_app, intelligent_agent, "Invoca", "Python API")
+Rel(intelligent_agent, interviewer_agent, "Usa", "Python")
+Rel(intelligent_agent, profiler_agent, "Usa", "Python")
+Rel(intelligent_agent, recommender_agent, "Usa", "Python")
+Rel(recommender_agent, rag_agent, "Usa", "Python")
+Rel(intelligent_agent, otp_auth, "Usa", "Python")
+Rel(intelligent_agent, google_auth, "Usa", "Python")
+Rel(rag_agent, document_retriever, "Usa", "Python")
+Rel(rag_agent, query_processor, "Usa", "Python")
+Rel(intelligent_agent, chat_memory, "Usa", "Python")
+Rel(otp_auth, db_model, "Lee y escribe", "SQL")
+Rel(google_auth, db_model, "Lee y escribe", "SQL")
+Rel(chat_memory, db_model, "Lee y escribe", "SQL")
+Rel(document_retriever, vector_functions, "Usa", "Python")
+Rel(vector_functions, chromadb, "Consulta", "ChromaDB API")
+Rel(vector_functions, openai, "Obtiene embeddings", "HTTPS/REST")
+Rel(tracing, openai, "Envía trazas", "HTTPS/REST")
+
+@enduml
+

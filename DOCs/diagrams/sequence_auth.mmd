@@ -1,0 +1,41 @@
+sequenceDiagram
+    participant U as Usuario
+    participant W as WebApp
+    participant IA as Intelligent Agent
+    participant OTP as OTP Auth
+    participant DB as DB Model
+    participant SMTP as SMTP Server
+
+    Note over U,SMTP: Envío de Código OTP
+    U->>W: Proporciona email y nombre
+    W->>IA: process_query(email + nombre)
+    IA->>IA: _handle_authentication()
+    IA->>OTP: send_otp_to_user(email, name)
+    OTP->>OTP: generate_otp() → código 6 dígitos
+    OTP->>DB: store_otp(email, código, expires_at)
+    OTP->>SMTP: send_otp_email(email, código)
+    SMTP-->>U: Email con código OTP
+    OTP-->>IA: {"success": true, "message": "Código enviado"}
+    IA-->>W: "Código enviado a tu email"
+    W-->>U: "Revisa tu correo"
+
+    Note over U,SMTP: Verificación de Código
+    U->>W: Proporciona código OTP
+    W->>IA: process_query(código)
+    IA->>IA: _handle_authentication()
+    IA->>OTP: verify_otp_code(email, código)
+    OTP->>DB: SELECT código WHERE email AND expires_at > NOW()
+    
+    alt Código válido
+        OTP->>DB: DELETE código usado
+        OTP->>DB: INSERT chat_user (email, name, authenticated=True)
+        OTP->>DB: INSERT chat_session (session_token)
+        OTP-->>IA: {"success": true, "session_token": "..."}
+        IA-->>W: "Autenticación exitosa"
+        W-->>U: Acceso autorizado
+    else Código inválido o expirado
+        OTP-->>IA: {"success": false, "message": "Código inválido"}
+        IA-->>W: "Código inválido, intenta de nuevo"
+        W-->>U: Error de autenticación
+    end
+

@@ -1,8 +1,32 @@
-# 🌿 EcoMarket RAG System
+# 🎓 Sistema de Recomendación de Posgrados - Universidad ICESI
 
-**Sistema RAG para Atención al Cliente – EcoMarket**
+**Sistema Inteligente de Recomendación basado en IA**
 
-Este proyecto implementa un sistema de generación aumentada por recuperación (RAG) para mejorar la atención al cliente de EcoMarket, una empresa de e-commerce sostenible. El sistema permite responder preguntas frecuentes y consultas sobre productos utilizando documentos internos como fuente confiable.
+Este proyecto implementa un sistema inteligente de recomendación de posgrados para la Universidad ICESI. El sistema utiliza técnicas avanzadas de procesamiento de lenguaje natural (NLP), recuperación aumentada por generación (RAG) y agentes inteligentes para proporcionar recomendaciones personalizadas a estudiantes prospectivos.
+
+## 📚 Documentación General
+
+Para una visión completa del proyecto, incluyendo arquitectura, diagramas C4 y componentes principales, consulta:
+
+👉 **[PROJECT_OVERVIEW.md](./DOCs/PROJECT_OVERVIEW.md)** - Documentación general del proyecto
+
+### Diagramas de Arquitectura
+
+El proyecto incluye diagramas de arquitectura C4 completos:
+
+- 📊 **[C4_ARCHITECTURE_DIAGRAMS.md](./DOCs/C4_ARCHITECTURE_DIAGRAMS.md)** - Guía completa para generar diagramas C4
+- 📐 **[Diagramas Generados](./DOCs/diagrams/generated/)** - Diagramas en formato PNG
+
+Para generar los diagramas:
+```bash
+./scripts/generate_diagrams.sh
+```
+
+---
+
+## 🌿 EcoMarket RAG System (Legacy)
+
+**Nota**: Este proyecto evolucionó desde un sistema RAG para EcoMarket hacia el Sistema de Recomendación de Posgrados ICESI. La siguiente información corresponde a la versión anterior del sistema.
 
 ## 👥 Integrantes
 

@@ -104,58 +104,79 @@ embeddings = OpenAIEmbeddings(
 def create_optimal_splitter(file_type: str, content: str = ""):
     """
     Crear splitter optimizado basado en el tipo de contenido.
+    Optimizado para documentos académicos de posgrados (PDFs, textos de programas).
     
     Args:
-        file_type (str): Tipo de archivo (excel, txt, pdf, etc.)
+        file_type (str): Tipo de archivo (pdf, txt, docx, etc.)
         content (str): Contenido del documento para análisis
     
     Returns:
         CharacterTextSplitter: Splitter optimizado para el tipo de contenido
     """
-    # Detectar si es contenido estructurado (Excel, CSV, etc.)
+    # Detectar si es contenido estructurado (Excel, CSV, JSON)
     is_structured = (
-        file_type in ["excel", "csv"] or 
+        file_type in ["excel", "csv", "json"] or 
         "Fila" in content or 
-        "Columnas" in content or
-        "Nombre del Producto" in content
+        "Columnas" in content
+    )
+    
+    # Detectar si es documento académico (PDF de maestría, programa, etc.)
+    is_academic = (
+        file_type == "pdf" or
+        "maestría" in content.lower() or
+        "maestria" in content.lower() or
+        "programa" in content.lower() or
+        "posgrado" in content.lower() or
+        "universidad" in content.lower() or
+        "icesi" in content.lower()
     )
     
     if is_structured:
         # Para datos estructurados: fragmentos medianos
         return CharacterTextSplitter(
-            chunk_size=500,     # Fragmentos más grandes para capturar más productos
-            chunk_overlap=50,   # Buena superposición para contexto
+            chunk_size=500,
+            chunk_overlap=50,
             length_function=len,
             separator="\n"
         )
-    else:
-        # Para texto narrativo: fragmentos más grandes
+    elif is_academic:
+        # Para documentos académicos: fragmentos más grandes para mantener contexto
+        # Los PDFs de programas académicos tienen secciones largas que deben mantenerse juntas
         return CharacterTextSplitter(
-            chunk_size=500,     # Más grande para texto narrativo
-            chunk_overlap=50,   # Más superposición
+            chunk_size=1000,    # Fragmentos más grandes para documentos académicos
+            chunk_overlap=200,  # Mayor superposición para mantener contexto entre secciones
+            length_function=len,
+            separator="\n\n"    # Separar por párrafos dobles para mantener estructura
+        )
+    else:
+        # Para texto narrativo general: fragmentos medianos
+        return CharacterTextSplitter(
+            chunk_size=800,     # Tamaño medio para texto narrativo
+            chunk_overlap=100,  # Superposición moderada
             length_function=len,
             separator="\n"
         )
 
-# Splitter por defecto (para compatibilidad)
+# Splitter por defecto (optimizado para documentos académicos)
 text_splitter = CharacterTextSplitter(
-    chunk_size=500,
-    chunk_overlap=50,
+    chunk_size=1000,    # Tamaño optimizado para documentos académicos
+    chunk_overlap=200,  # Mayor superposición para mantener contexto
     length_function=len,
-    separator="\n"
+    separator="\n\n"    # Separar por párrafos para mantener estructura
 )
 
 
 def load_excel_with_pandas(file_path: str) -> list[Document]:
     """
-    Load Excel file using pandas and create one Document per product row.
-    Each product becomes a separate chunk with rich metadata.
+    Load Excel file using pandas and create one Document per row.
+    Each row becomes a separate chunk with rich metadata.
+    Optimizado para datos estructurados (preguntas, programas, etc.)
     
     Args:
         file_path (str): Path to the Excel file.
     
     Returns:
-        list[Document]: A list of Document objects, one per product row.
+        list[Document]: A list of Document objects, one per row.
     """
     try:
         # Read Excel file
@@ -167,24 +188,22 @@ def load_excel_with_pandas(file_path: str) -> list[Document]:
             return documents
         
         # Normalize column names to handle variations
+        # Adaptado para datos académicos (preguntas, programas, etc.)
         def normalize_column_name(col_name: str) -> str:
             """Normalize column names to standard format"""
             col_lower = col_name.lower().strip()
             
-            # Map common variations to standard names
-            if 'nombre' in col_lower and ('producto' in col_lower or 'product' in col_lower):
-                return 'producto_nombre'
-            elif 'producto' in col_lower:
-                return 'producto_nombre'
-            elif 'categoria' in col_lower or 'category' in col_lower:
+            # Map common variations to standard names (adaptado para datos académicos)
+            if 'pregunta' in col_lower or 'question' in col_lower:
+                return 'pregunta'
+            elif 'programa' in col_lower or 'program' in col_lower:
+                return 'programa'
+            elif 'nombre' in col_lower or 'name' in col_lower:
+                return 'nombre'
+            elif 'categoria' in col_lower or 'category' in col_lower or 'tipo' in col_lower:
                 return 'categoria'
-            elif 'cantidad' in col_lower or ('stock' in col_lower or 'quantity' in col_lower):
-                return 'cantidad'
-            elif 'precio' in col_lower or 'price' in col_lower:
-                if 'unitario' in col_lower or 'unit' in col_lower:
-                    return 'precio'
-                else:
-                    return 'precio'
+            elif 'descripcion' in col_lower or 'description' in col_lower:
+                return 'descripcion'
             elif 'fecha' in col_lower or 'date' in col_lower:
                 return 'fecha'
             else:
@@ -342,12 +361,11 @@ def create_collection(collection_name, documents):
         file_type = doc.metadata.get('file_type', 'unknown')
         content = doc.page_content
         
-        # For Excel files, check if it's already chunked at product level
-        # (has row_index metadata indicating it's a single product chunk)
-        if file_type == 'excel' and 'row_index' in doc.metadata:
-            # This is already a product-level chunk, don't split further
+        # For structured data files (Excel, CSV), check if already chunked
+        if file_type in ['excel', 'csv'] and 'row_index' in doc.metadata:
+            # This is already a structured chunk, don't split further
             all_texts.append(doc)
-            print(f"[PACKAGE] Product chunk (already chunked at product level)")
+            print(f"[PACKAGE] Structured data chunk (already chunked)")
         else:
             # Create optimal splitter for this document
             optimal_splitter = create_optimal_splitter(file_type, content)
@@ -514,12 +532,11 @@ def add_documents_to_collection(vectordb, documents):
         # Determine file type from metadata
         file_type = doc.metadata.get('file_type', 'unknown')
         
-        # For Excel files, check if it's already chunked at product level
-        # (has row_index metadata indicating it's a single product chunk)
-        if file_type == 'excel' and 'row_index' in doc.metadata:
-            # This is already a product-level chunk, don't split further
+        # For structured data files, check if already chunked
+        if file_type in ['excel', 'csv'] and 'row_index' in doc.metadata:
+            # This is already a structured chunk, don't split further
             all_texts.append(doc)
-            print(f"[PACKAGE] Adding product chunk (already chunked at product level)")
+            print(f"[PACKAGE] Adding structured data chunk (already chunked)")
         else:
             # Split the document into smaller text chunks
             doc_texts = text_splitter.split_documents([doc])
@@ -748,7 +765,8 @@ def register_sample_documents_in_db():
 
 def get_combined_retriever(score_threshold: float = 0.3):
     """
-    Get a retriever that combines both sample_documents and ecomarket_kb collections.
+    Get a retriever that combines posgrado_programs and sample_documents collections.
+    Optimizado para el sistema de recomendación de posgrados ICESI.
     
     Args:
         score_threshold (float): The minimum similarity score threshold for retrieving documents.
@@ -757,7 +775,15 @@ def get_combined_retriever(score_threshold: float = 0.3):
         Retriever: A combined retriever that searches both collections.
     """
     try:
-        # Try to load sample documents collection first
+        # Try to load posgrado programs collection first (prioridad)
+        posgrado_retriever = None
+        try:
+            posgrado_retriever = load_retriever("posgrado_programs", score_threshold)
+            print("[OK] Posgrado programs retriever loaded")
+        except Exception as e:
+            print(f"[WARNING]  Could not load posgrado_programs: {e}")
+        
+        # Try to load sample documents collection
         sample_retriever = None
         try:
             sample_retriever = load_retriever("sample_documents", score_threshold)
@@ -765,19 +791,11 @@ def get_combined_retriever(score_threshold: float = 0.3):
         except Exception as e:
             print(f"[WARNING]  Could not load sample documents: {e}")
         
-        # Try to load regular documents collection
-        regular_retriever = None
-        try:
-            regular_retriever = load_retriever("ecomarket_kb", score_threshold)
-            print("[OK] Regular documents retriever loaded")
-        except Exception as e:
-            print(f"[WARNING]  Could not load regular documents: {e}")
-        
-        # Return the available retriever
-        if sample_retriever:
+        # Return the available retriever (prioridad: posgrado_programs > sample_documents)
+        if posgrado_retriever:
+            return posgrado_retriever
+        elif sample_retriever:
             return sample_retriever
-        elif regular_retriever:
-            return regular_retriever
         else:
             raise Exception("No collections available")
             

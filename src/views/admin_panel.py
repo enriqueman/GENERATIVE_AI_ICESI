@@ -81,7 +81,7 @@ def manage_documents():
     st.subheader("Gestión de Base de Conocimiento")
     
     # Get system chat (chat_id = 1 reserved for system documents)
-    collection_name = "ecomarket_kb"
+    collection_name = "posgrado_programs"
     
     # Upload new document
     st.markdown("### 📤 Subir Nuevo Documento")
@@ -95,7 +95,7 @@ def manage_documents():
         
         doc_description = st.text_area(
             "Descripción del documento",
-            placeholder="Ej: Política de devoluciones actualizada 2024"
+            placeholder="Ej: Información sobre programa de Maestría en Ciencia de Datos"
         )
         
         submit_button = st.form_submit_button("Subir Documento", type="primary")

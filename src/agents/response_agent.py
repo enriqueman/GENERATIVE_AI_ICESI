@@ -198,7 +198,7 @@ class ResponseAgent:
                 response += data + "\n\n"
         
         if not response:
-            response = "Hola! [ECOMARKET] Lo siento, no pude procesar tu solicitud en este momento. Por favor, intenta de nuevo o contáctanos directamente."
+            response = "Hola! [GRADUATE] Lo siento, no pude procesar tu solicitud en este momento. Por favor, intenta de nuevo o contáctanos directamente a admisiones@icesi.edu.co"
         
         return response
     
@@ -221,7 +221,7 @@ class ResponseAgent:
         for info in missing_info:
             response += f"[LIST] {info}\n"
         
-        response += "\nPor favor, proporciona esta información y estaré encantada de ayudarte. [ECOMARKET]"
+        response += "\nPor favor, proporciona esta información y estaré encantada de ayudarte con tu consulta sobre posgrados ICESI. [GRADUATE]"
         
         return response
 

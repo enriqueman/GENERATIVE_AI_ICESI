@@ -27,14 +27,14 @@ class QueryProcessor:
     Herramienta para procesar y clasificar consultas del usuario
     """
     
-    # Categorías de consultas
+    # Categorías de consultas (adaptadas para posgrados)
     CATEGORIES = {
-        "producto": ["producto", "productos", "inventario", "catálogo", "disponibilidad", "stock"],
-        "precio": ["precio", "costo", "cuánto cuesta", "valor"],
-        "contacto": ["teléfono", "whatsapp", "email", "contactar", "contacto"],
-        "devolución": ["devolución", "devolver", "reembolso", "garantía", "cambio"],
-        "envío": ["envío", "entrega", "shipping", "transporte", "días"],
-        "general": ["información", "ayuda", "duda", "consulta"]
+        "programa": ["programa", "programas", "maestría", "maestria", "posgrado", "posgrados", "especialización", "especializacion"],
+        "admisión": ["admisión", "admission", "requisitos", "requisito", "inscripción", "inscripcion", "matrícula", "matricula"],
+        "costo": ["precio", "costo", "cuánto cuesta", "valor", "matrícula", "matricula", "pensión", "pension", "financiación", "financiacion"],
+        "contacto": ["teléfono", "telefono", "whatsapp", "email", "contactar", "contacto", "dirección", "direccion"],
+        "información": ["información", "informacion", "detalles", "características", "caracteristicas", "duración", "duracion", "modalidad"],
+        "general": ["ayuda", "duda", "consulta", "pregunta"]
     }
     
     # Palabras clave para consultas de lista
@@ -148,11 +148,11 @@ class QueryProcessor:
         """
         entities = []
         
-        # Productos (patrones comunes)
-        # Esto es un ejemplo básico, podrías usar NER más avanzado
-        if any(word in query.lower() for word in ["botella", "bolsa", "cepillo", "cargador"]):
+        # Programas académicos (patrones comunes)
+        # Detectar nombres de programas de posgrado
+        if any(word in query.lower() for word in ["maestría", "maestria", "especialización", "especializacion", "doctorado", "posgrado"]):
             entities.append({
-                "type": "product",
+                "type": "program",
                 "value": query
             })
         
@@ -179,17 +179,20 @@ class QueryProcessor:
         """
         variations = [query]  # La consulta original
         
-        # Agregar variaciones si es una consulta de lista
+        # Agregar variaciones si es una consulta de lista (adaptado para posgrados)
         if self._is_list_query(query.lower()):
             variations.extend([
-                f"{query} con precios",
+                f"{query} con información",
                 f"{query} disponibles",
-                f"productos relacionados con {query}"
+                f"programas relacionados con {query}",
+                f"posgrados {query}"
             ])
         
-        # Agregar variación con sinónimos comunes
+        # Agregar variación con sinónimos comunes (adaptado para posgrados)
         variations.append(query.replace("cuánto cuesta", "precio de"))
-        variations.append(query.replace("qué productos", "catálogo"))
+        variations.append(query.replace("qué programas", "programas de posgrado"))
+        variations.append(query.replace("maestría", "maestria"))
+        variations.append(query.replace("maestria", "maestría"))
         
         return variations
 

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.tracing import tracer
 from templates.agent_reasoning import get_agent_reasoning_prompt, get_reasoning_prompt
-from agents.rag_agent import EcoMarketAgent
+from agents.rag_agent import PosgradoAgent
 from tools.chat_memory import store_chat_memory, retrieve_chat_memory, extract_user_info, get_context_for_query
 from tools.otp_auth import send_otp_to_user, verify_otp_code, check_authentication_status
 
@@ -66,7 +66,7 @@ class OrchestratorAgent:
     def __init__(self):
         """Inicializar el agente orquestador"""
         self.llm_reasoning = None
-        self.rag_agent = EcoMarketAgent()
+        self.rag_agent = PosgradoAgent()
         self._initialize()
     
     def _initialize(self):

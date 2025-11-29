@@ -111,3 +111,4 @@ Cuando la arquitectura cambie:
 - [PlantUML](https://plantuml.com/)
 - [Mermaid](https://mermaid.js.org/)
 
+

@@ -231,6 +231,78 @@ def init_database():
     conn.close()
     print("Database initialized successfully.")
 
+def clear_sqlite_database():
+    """
+    Limpiar todos los datos de la base de datos SQLite pero mantener la estructura de tablas.
+    Esto elimina todos los registros de todas las tablas excepto las tablas del sistema.
+    """
+    conn = None
+    try:
+        # Verificar si la base de datos existe
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        db_path = os.path.join(base_dir, "doc_sage.sqlite")
+        
+        if not os.path.exists(db_path):
+            print("[INFO] Base de datos SQLite no existe aún, nada que limpiar")
+            return True
+        
+        conn = connect_db()
+        cursor = conn.cursor()
+        
+        # Desactivar foreign keys temporalmente para poder eliminar datos
+        cursor.execute("PRAGMA foreign_keys = OFF")
+        
+        # Lista de tablas a limpiar (excluyendo sqlite_master y otras tablas del sistema)
+        tables_to_clear = [
+            'chat',
+            'sources',
+            'messages',
+            'admin_users',
+            'sessions',
+            'tickets',
+            'chat_memory',
+            'google_auth',
+            'otp_codes',
+            'chat_users',
+            'chat_sessions',
+            'interview_questions',
+            'posgrado_programs'
+        ]
+        
+        # Eliminar datos de cada tabla
+        for table in tables_to_clear:
+            try:
+                cursor.execute(f"DELETE FROM {table}")
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    print(f"[CLEAN] Eliminados {deleted} registros de la tabla '{table}'")
+            except sqlite3.OperationalError as e:
+                # La tabla puede no existir aún, eso está bien
+                print(f"[INFO] Tabla '{table}' no existe o ya está vacía: {e}")
+        
+        # Resetear secuencias de autoincremento
+        for table in tables_to_clear:
+            try:
+                cursor.execute(f"DELETE FROM sqlite_sequence WHERE name = '{table}'")
+            except:
+                pass
+        
+        # Reactivar foreign keys
+        cursor.execute("PRAGMA foreign_keys = ON")
+        
+        conn.commit()
+        print("[OK] Base de datos SQLite limpiada exitosamente")
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] Error limpiando base de datos SQLite: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 # CRUD Operations for 'chat' table
 def create_chat(title):
     conn = connect_db()

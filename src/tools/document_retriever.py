@@ -60,6 +60,12 @@ class DocumentRetriever:
         """
         Buscar documentos relevantes para una consulta
         
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene el decorador @traceable que crea una traza en LangSmith.
+        - Se agrupa automáticamente bajo la traza padre si se llama desde OrchestratorAgent.process_query()
+        - NO crear context managers adicionales aquí - el de OrchestratorAgent es suficiente
+        - NO remover el decorador @traceable - es necesario para que aparezca en LangSmith
+        
         Args:
             query (str): Consulta del usuario
             

@@ -40,6 +40,12 @@ def check_product_existence(
     """
     Verificar existencia de productos usando búsqueda semántica en Chroma
     
+    ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+    Esta función tiene el decorador @TRACEABLE que crea una traza en LangSmith.
+    - Se agrupa automáticamente bajo la traza padre si se llama desde OrchestratorAgent.process_query()
+    - NO crear context managers adicionales aquí - el de OrchestratorAgent es suficiente
+    - NO remover el decorador @TRACEABLE - es necesario para que aparezca en LangSmith
+    
     Args:
         query: Nombre del producto, lista, categoría o rango de precio
         search_type: Tipo de búsqueda - "producto", "lista", "categoria", "precio", "nombre_exacto"

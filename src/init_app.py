@@ -12,9 +12,9 @@ import sqlite3
 # Agregar el directorio src al path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from models.db import init_database, connect_db
+from models.db import init_database, connect_db, clear_sqlite_database
 from controllers.auth import create_admin_table, create_admin_user
-from utils.vector_functions import initialize_sample_collection
+from utils.vector_functions import initialize_sample_collection, clear_chromadb
 
 def wait_for_database():
     """Esperar a que la base de datos esté disponible"""
@@ -51,6 +51,22 @@ def initialize_application():
     os.makedirs(os.path.join(base_dir, "static/sample_documents"), exist_ok=True)
     os.makedirs(os.path.join(base_dir, "data"), exist_ok=True)
     print("[OK] Directorios creados")
+    print()
+    
+    # 1.5. Limpiar bases de datos antes de inicializar
+    print("[CLEAN] Limpiando bases de datos existentes...")
+    print("[CLEAN] Limpiando base de datos SQLite...")
+    try:
+        clear_sqlite_database()
+    except Exception as e:
+        print(f"[WARNING] Error limpiando SQLite: {e}")
+    
+    print("[CLEAN] Limpiando base de datos vectorial ChromaDB...")
+    try:
+        clear_chromadb()
+    except Exception as e:
+        print(f"[WARNING] Error limpiando ChromaDB: {e}")
+    print("[OK] Bases de datos limpiadas")
     print()
     
     # 2. Inicializar base de datos

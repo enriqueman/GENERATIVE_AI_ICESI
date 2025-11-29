@@ -42,6 +42,25 @@ class OrchestratorAgent:
     """
     Agente Orquestador que analiza consultas y decide qué herramientas usar.
     Su función es hacer reasoning y orquestar las herramientas.
+    
+    ⚠️ ADVERTENCIA CRÍTICA - SISTEMA DE TRAZAS UNIFICADAS:
+    Este agente implementa un sistema de trazas unificadas para LangSmith.
+    
+    PUNTO DE ENTRADA PRINCIPAL:
+    - SIEMPRE usar process_query() como punto de entrada - NO llamar analyze_query() o execute_tools() directamente
+    - process_query() crea un context manager que agrupa TODAS las trazas en una sola
+    
+    ESTRUCTURA DE TRAZAS:
+    - process_query() → context manager padre (with trace())
+    - analyze_query() → tiene @traceable, se agrupa bajo el padre
+    - execute_tools() → llama a _execute_tools_internal() que tiene @traceable, se agrupa bajo el padre
+    - Todas las herramientas y agentes llamados también se agrupan automáticamente
+    
+    REGLAS CRÍTICAS:
+    1. NO crear context managers adicionales (with trace()) dentro de los métodos
+    2. NO remover los decoradores @traceable - son necesarios para que aparezcan en LangSmith
+    3. NO llamar analyze_query() o execute_tools() directamente desde fuera - usar process_query()
+    4. Si necesitas agregar nuevas funciones con trazas, usar @traceable pero NO crear context managers
     """
     
     def __init__(self):
@@ -79,6 +98,13 @@ class OrchestratorAgent:
         Procesar una consulta completa: analizar y ejecutar herramientas.
         Este método envuelve todo en una traza unificada.
         
+        ⚠️ ADVERTENCIA CRÍTICA - SISTEMA DE TRAZAS:
+        Este método es el PUNTO DE ENTRADA PRINCIPAL para el sistema de trazas unificadas.
+        - NO crear context managers `with trace()` adicionales dentro de este método o sus llamados
+        - NO llamar directamente a `analyze_query()` o `execute_tools()` desde fuera de este método
+        - Este context manager agrupa TODAS las trazas de agentes y herramientas en LangSmith
+        - Si necesitas procesar una consulta, SIEMPRE usa este método, no los métodos internos
+        
         Args:
             query: Consulta del usuario
             trace_id: ID del trace para agrupar logs
@@ -88,7 +114,9 @@ class OrchestratorAgent:
         Returns:
             dict: Resultados completos con análisis y ejecución de herramientas
         """
-        # Crear context manager de traza para agrupar todo
+        # ⚠️ ADVERTENCIA: Este context manager es CRÍTICO para agrupar todas las trazas
+        # NO crear context managers adicionales dentro de los métodos llamados
+        # NO modificar esta estructura sin entender completamente el sistema de trazas
         if TRACE_AVAILABLE and trace:
             project_name = os.getenv("LANGCHAIN_PROJECT", "ecomarket-agent")
             with trace(
@@ -101,11 +129,16 @@ class OrchestratorAgent:
             return self._process_query_internal(query, trace_id, is_authenticated, session_info)
     
     def _process_query_internal(self, query: str, trace_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> dict:
-        """Procesar consulta internamente (sin context manager)"""
-        # Analizar consulta
+        """
+        Procesar consulta internamente (sin context manager).
+        
+        ⚠️ ADVERTENCIA: Este método se ejecuta DENTRO del context manager de process_query().
+        NO agregar context managers aquí - todas las trazas se agrupan automáticamente.
+        """
+        # Analizar consulta (tiene @traceable - se agrupa bajo la traza padre de process_query)
         analysis = self.analyze_query(query, trace_id, is_authenticated, session_info)
         
-        # Ejecutar herramientas
+        # Ejecutar herramientas (llama a _execute_tools_internal que tiene @traceable)
         tool_results = self.execute_tools(analysis, query, trace_id, session_info)
         
         return {
@@ -117,6 +150,13 @@ class OrchestratorAgent:
     def analyze_query(self, query: str, trace_id: str = None, is_authenticated: bool = False, session_info: dict = None) -> dict:
         """
         Analizar la consulta del usuario usando reasoning.
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene el decorador @traceable que crea una traza en LangSmith.
+        - Se agrupa automáticamente bajo la traza padre si se llama desde process_query()
+        - Si se llama directamente (sin process_query()), creará una traza separada
+        - Para mantener trazas unificadas, SIEMPRE usar process_query() como punto de entrada
+        - NO remover el decorador @traceable - es necesario para que aparezca en LangSmith
         
         Args:
             query: Consulta del usuario
@@ -326,6 +366,13 @@ class OrchestratorAgent:
         """
         Ejecutar las herramientas necesarias según el análisis.
         
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método es un wrapper que llama a _execute_tools_internal().
+        - NO agregar lógica de context managers aquí
+        - NO agregar decoradores @traceable aquí (está en _execute_tools_internal)
+        - El context manager de process_query() agrupa todas las trazas automáticamente
+        - Para mantener trazas unificadas, SIEMPRE usar process_query() como punto de entrada
+        
         Args:
             analysis: Resultado del análisis de reasoning
             query: Consulta original del usuario
@@ -335,14 +382,22 @@ class OrchestratorAgent:
         Returns:
             dict: Resultados de las herramientas
         """
-        # Llamar directamente a _execute_tools_internal que tiene el decorador @traceable
-        # El context manager de process_query() agrupará todas las trazas
+        # ⚠️ ADVERTENCIA: Llamar directamente a _execute_tools_internal que tiene @traceable
+        # NO crear context managers adicionales aquí - el de process_query() es suficiente
         return self._execute_tools_internal(analysis, query, trace_id, session_info)
     
     @traceable(name="OrchestratorAgent.execute_tools")
     def _execute_tools_internal(self, analysis: dict, query: str, trace_id: str = None, session_info: dict = None) -> dict:
         """
         Ejecutar las herramientas necesarias según el análisis.
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene el decorador @traceable que crea una traza en LangSmith.
+        - Se agrupa automáticamente bajo la traza padre si se llama desde process_query()
+        - NO remover el decorador @traceable - es necesario para que aparezca en LangSmith
+        - NO crear context managers adicionales aquí - el de process_query() es suficiente
+        - Las herramientas llamadas dentro (check_product_existence, QueryProcessor, etc.) 
+          también se agrupan automáticamente si tienen @traceable
         
         Args:
             analysis: Resultado del análisis de reasoning
@@ -584,6 +639,10 @@ class OrchestratorAgent:
         """
         Extraer y almacenar información del usuario de la consulta
         
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
+        
         Args:
             session_id: ID de la sesión
             query: Consulta del usuario
@@ -622,6 +681,10 @@ class OrchestratorAgent:
     def retrieve_memory(self, session_id: str, trace_id: str = None, is_authenticated: bool = False) -> str:
         """
         Recuperar memorias de la sesión para enriquecer el contexto
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
         
         Args:
             session_id: ID de la sesión
@@ -683,7 +746,18 @@ class OrchestratorAgent:
 _orchestrator_instance = None
 
 def get_orchestrator():
-    """Obtener instancia global del orquestador"""
+    """
+    Obtener instancia global del orquestador
+    
+    ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+    Para mantener trazas unificadas en LangSmith, SIEMPRE usar:
+        orchestrator.process_query(query, trace_id, is_authenticated, session_info)
+    
+    NO usar directamente:
+        orchestrator.analyze_query() o orchestrator.execute_tools()
+    
+    Esto asegura que todas las trazas se agrupen bajo una sola traza padre.
+    """
     global _orchestrator_instance
     if _orchestrator_instance is None:
         _orchestrator_instance = OrchestratorAgent()

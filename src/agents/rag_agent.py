@@ -99,6 +99,13 @@ class EcoMarketAgent:
         """
         Procesar una consulta del usuario usando herramientas
         
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene el decorador @traceable que crea una traza en LangSmith.
+        - Se agrupa automáticamente bajo la traza padre si se llama desde OrchestratorAgent.process_query()
+        - NO crear context managers adicionales aquí - el de OrchestratorAgent es suficiente
+        - NO remover el decorador @traceable - es necesario para que aparezca en LangSmith
+        - Los métodos helper (_handle_product_query, etc.) también tienen @traceable y se agrupan automáticamente
+        
         Args:
             question (str): Pregunta del usuario
             enable_logging (bool): Habilitar logging detallado
@@ -160,7 +167,13 @@ class EcoMarketAgent:
     
     @traceable(name="RAGAgent._handle_list_query")
     def _handle_list_query(self, question: str, query_info: dict, enable_logging: bool, trace_id: str = None) -> str:
-        """Manejar consultas que solicitan listas de productos"""
+        """
+        Manejar consultas que solicitan listas de productos
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
+        """
         # Generar múltiples variaciones de la consulta
         queries = self.query_processor.generate_search_queries(question)
         
@@ -181,7 +194,13 @@ class EcoMarketAgent:
     
     @traceable(name="RAGAgent._handle_standard_query")
     def _handle_standard_query(self, question: str, query_info: dict, enable_logging: bool, trace_id: str = None) -> str:
-        """Manejar consultas estándar"""
+        """
+        Manejar consultas estándar
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
+        """
         # Buscar documentos relevantes
         search_results = self.document_retriever.search(question)
         
@@ -234,7 +253,13 @@ class EcoMarketAgent:
     
     @traceable(name="RAGAgent._handle_product_query")
     def _handle_product_query(self, question: str, query_info: dict, enable_logging: bool, trace_id: str = None) -> str:
-        """Manejar consultas de productos usando la herramienta de verificación"""
+        """
+        Manejar consultas de productos usando la herramienta de verificación
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
+        """
         try:
             question_lower = question.lower()
             
@@ -587,7 +612,13 @@ No hay productos disponibles en nuestro inventario actual.
     
     @traceable(name="RAGAgent._handle_ticket_query")
     def _handle_ticket_query(self, question: str, query_info: dict, enable_logging: bool, trace_id: str = None, session_info: dict = None) -> str:
-        """Manejar consultas que requieren crear o consultar tickets"""
+        """
+        Manejar consultas que requieren crear o consultar tickets
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
+        """
         import re
         
         question_lower = question.lower()
@@ -1121,7 +1152,13 @@ Tu solicitud ha sido registrada. Un representante se comunicará contigo pronto.
     
     @traceable(name="RAGAgent._handle_consulta_ticket")
     def _handle_consulta_ticket(self, question: str, query_info: dict, trace_id: str = None, session_info: dict = None) -> str:
-        """Manejar consultas de tickets existentes"""
+        """
+        Manejar consultas de tickets existentes
+        
+        ⚠️ ADVERTENCIA - SISTEMA DE TRAZAS:
+        Este método tiene @traceable y se agrupa bajo la traza padre automáticamente.
+        NO remover el decorador - es necesario para que aparezca en LangSmith.
+        """
         try:
             import re
             

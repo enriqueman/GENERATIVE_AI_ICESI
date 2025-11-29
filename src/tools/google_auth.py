@@ -53,43 +53,84 @@ class GoogleAuthService:
         try:
             # Create message
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = "Código de verificación - EcoMarket"
+            msg['Subject'] = "Código de verificación - Universidad ICESI"
             msg['From'] = self.smtp_from
             msg['To'] = email
             
             # Create HTML email
             html_body = f"""
             <html>
-              <body style="font-family: Arial, sans-serif; padding: 20px;">
-                <div style="max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 30px; border-radius: 10px;">
-                  <h2 style="color: #2e7d32; text-align: center;">🔐 Verificación de Correo</h2>
-                  <p style="font-size: 16px; color: #333;">Estimado usuario,</p>
-                  <p style="font-size: 16px; color: #333;">Su código de verificación es:</p>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <span style="font-size: 32px; font-weight: bold; color: #2e7d32; letter-spacing: 5px; padding: 15px 30px; background-color: #fff; border: 2px dashed #2e7d32; border-radius: 5px; display: inline-block;">
+              <body style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <!-- Header -->
+                  <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #003366;">
+                    <h1 style="color: #003366; font-size: 24px; margin: 0; font-weight: bold;">Universidad ICESI</h1>
+                    <p style="color: #666; font-size: 14px; margin: 5px 0 0 0;">Sistema de Recomendación de Posgrados</p>
+                  </div>
+                  
+                  <!-- Content -->
+                  <h2 style="color: #003366; text-align: center; font-size: 20px; margin-bottom: 20px;">🔐 Verificación de Correo Electrónico</h2>
+                  <p style="font-size: 16px; color: #333; line-height: 1.6;">Estimado/a candidato/a,</p>
+                  <p style="font-size: 16px; color: #333; line-height: 1.6;">Para continuar con el proceso de recomendación de posgrados, necesitamos verificar tu correo electrónico. Tu código de verificación es:</p>
+                  
+                  <!-- OTP Code -->
+                  <div style="text-align: center; margin: 35px 0;">
+                    <span style="font-size: 36px; font-weight: bold; color: #003366; letter-spacing: 8px; padding: 20px 40px; background-color: #f0f4f8; border: 2px solid #003366; border-radius: 6px; display: inline-block; font-family: 'Courier New', monospace;">
                       {otp_code}
                     </span>
                   </div>
-                  <p style="font-size: 14px; color: #666;">Este código expira en 10 minutos.</p>
-                  <p style="font-size: 14px; color: #666;">Si no solicitó este código, ignore este mensaje.</p>
-                  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-                  <p style="font-size: 12px; color: #999; text-align: center;">EcoMarket - Sistema de Autenticación</p>
+                  
+                  <!-- Instructions -->
+                  <div style="background-color: #f0f4f8; padding: 15px; border-radius: 6px; margin: 25px 0;">
+                    <p style="font-size: 14px; color: #555; margin: 0; line-height: 1.6;">
+                      <strong>⏱️ Este código expira en 10 minutos.</strong><br>
+                      Por favor, ingresa este código en el sistema para continuar con tu proceso de recomendación.
+                    </p>
+                  </div>
+                  
+                  <p style="font-size: 14px; color: #666; line-height: 1.6;">Si no solicitaste este código, puedes ignorar este mensaje de forma segura.</p>
+                  
+                  <!-- Footer -->
+                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                  <div style="text-align: center;">
+                    <p style="font-size: 12px; color: #999; margin: 5px 0;">
+                      <strong>Universidad ICESI</strong><br>
+                      Sistema de Recomendación de Posgrados
+                    </p>
+                    <p style="font-size: 11px; color: #bbb; margin: 10px 0 0 0;">
+                      📧 admisiones.posgrados@icesi.edu.co<br>
+                      🌐 www.icesi.edu.co/posgrados
+                    </p>
+                  </div>
                 </div>
               </body>
             </html>
             """
             
             text_body = f"""
-            Verificación de Correo - EcoMarket
+            Universidad ICESI - Sistema de Recomendación de Posgrados
+            ===========================================================
             
-            Su código de verificación es: {otp_code}
+            Verificación de Correo Electrónico
+            
+            Estimado/a candidato/a,
+            
+            Para continuar con el proceso de recomendación de posgrados, necesitamos verificar tu correo electrónico.
+            
+            Tu código de verificación es: {otp_code}
             
             Este código expira en 10 minutos.
             
-            Si no solicitó este código, ignore este mensaje.
+            Por favor, ingresa este código en el sistema para continuar con tu proceso de recomendación.
+            
+            Si no solicitaste este código, puedes ignorar este mensaje de forma segura.
             
             --
-            EcoMarket - Sistema de Autenticación
+            Universidad ICESI
+            Sistema de Recomendación de Posgrados
+            
+            📧 admisiones.posgrados@icesi.edu.co
+            🌐 www.icesi.edu.co/posgrados
             """
             
             # Add both HTML and text versions

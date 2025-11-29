@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import traceback
+import shutil
 import pandas as pd
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
@@ -827,4 +828,63 @@ def test_sample_documents():
             
     except Exception as e:
         print(f"[ERROR] Error in test: {e}")
+        return False
+
+def clear_chromadb():
+    """
+    Limpiar completamente la base de datos vectorial ChromaDB.
+    Esto elimina el archivo chroma.sqlite3 y todos los directorios de índices vectoriales.
+    """
+    try:
+        base_dir = get_base_dir()
+        persist_directory = os.path.join(base_dir, "static/persist")
+        
+        if not os.path.exists(persist_directory):
+            print("[INFO] Directorio de persistencia de ChromaDB no existe, nada que limpiar")
+            return True
+        
+        deleted_items = []
+        
+        # Eliminar el archivo principal de ChromaDB
+        chroma_db_file = os.path.join(persist_directory, "chroma.sqlite3")
+        if os.path.exists(chroma_db_file):
+            try:
+                os.remove(chroma_db_file)
+                deleted_items.append("chroma.sqlite3")
+                print(f"[CLEAN] Eliminado archivo: chroma.sqlite3")
+            except Exception as e:
+                print(f"[WARNING] No se pudo eliminar chroma.sqlite3: {e}")
+        
+        # Eliminar archivos relacionados (shm, wal)
+        for ext in [".sqlite3-shm", ".sqlite3-wal"]:
+            related_file = os.path.join(persist_directory, f"chroma{ext}")
+            if os.path.exists(related_file):
+                try:
+                    os.remove(related_file)
+                    deleted_items.append(f"chroma{ext}")
+                    print(f"[CLEAN] Eliminado archivo: chroma{ext}")
+                except Exception as e:
+                    print(f"[WARNING] No se pudo eliminar chroma{ext}: {e}")
+        
+        # Eliminar todos los directorios UUID (índices vectoriales)
+        for item in os.listdir(persist_directory):
+            item_path = os.path.join(persist_directory, item)
+            # Los directorios UUID tienen formato de UUID (8-4-4-4-12 caracteres hexadecimales)
+            if os.path.isdir(item_path) and len(item) == 36 and item.count('-') == 4:
+                try:
+                    shutil.rmtree(item_path)
+                    deleted_items.append(f"directorio {item}")
+                    print(f"[CLEAN] Eliminado directorio de índice: {item}")
+                except Exception as e:
+                    print(f"[WARNING] No se pudo eliminar directorio {item}: {e}")
+        
+        if deleted_items:
+            print(f"[OK] ChromaDB limpiada exitosamente. {len(deleted_items)} elemento(s) eliminado(s)")
+        else:
+            print("[INFO] ChromaDB ya estaba vacía, nada que limpiar")
+        
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] Error limpiando ChromaDB: {e}")
         return False

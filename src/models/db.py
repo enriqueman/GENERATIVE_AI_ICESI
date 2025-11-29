@@ -219,6 +219,40 @@ def init_database():
         )
     """)
     
+    # Create 'contact_leads' table for users who want to be contacted
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS contact_leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            name TEXT,
+            profile_data TEXT,
+            recommendation_data TEXT,
+            wants_contact BOOLEAN DEFAULT 1,
+            email_sent BOOLEAN DEFAULT 0,
+            contacted BOOLEAN DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Create 'satisfaction_surveys' table for anonymous satisfaction surveys
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS satisfaction_surveys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            question_1 TEXT,
+            answer_1 TEXT,
+            question_2 TEXT,
+            answer_2 TEXT,
+            question_3 TEXT,
+            answer_3 TEXT,
+            overall_satisfaction INTEGER,
+            comments TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     # Initialize default chats if they don't exist
     cursor.execute("SELECT COUNT(*) FROM chat")
     if cursor.fetchone()[0] == 0:
@@ -1381,6 +1415,211 @@ def delete_interview_question(question_id: str, soft_delete: bool = True) -> boo
         return False
     finally:
         conn.close()
+
+# CRUD Operations for 'contact_leads' table
+def create_contact_lead(
+    email: str,
+    name: str = None,
+    profile_data: str = None,
+    recommendation_data: str = None,
+    wants_contact: bool = True,
+    email_sent: bool = False
+) -> int:
+    """Create a new contact lead"""
+    import json
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Convert dict to JSON string if needed
+        if profile_data and isinstance(profile_data, dict):
+            profile_data = json.dumps(profile_data, ensure_ascii=False)
+        if recommendation_data and isinstance(recommendation_data, dict):
+            recommendation_data = json.dumps(recommendation_data, ensure_ascii=False)
+        
+        cursor.execute("""
+            INSERT INTO contact_leads 
+            (email, name, profile_data, recommendation_data, wants_contact, email_sent)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (email, name, profile_data, recommendation_data, 1 if wants_contact else 0, 1 if email_sent else 0))
+        
+        lead_id = cursor.lastrowid
+        conn.commit()
+        return lead_id
+    except Exception as e:
+        print(f"Error creating contact lead: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def update_contact_lead(lead_id: int, **kwargs) -> bool:
+    """Update a contact lead"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    valid_fields = ["email", "name", "profile_data", "recommendation_data", 
+                    "wants_contact", "email_sent", "contacted", "notes"]
+    
+    updates = []
+    params = []
+    
+    for key, value in kwargs.items():
+        if key in valid_fields:
+            if key in ["wants_contact", "email_sent", "contacted"]:
+                value = 1 if value else 0
+            elif key in ["profile_data", "recommendation_data"] and isinstance(value, dict):
+                import json
+                value = json.dumps(value, ensure_ascii=False)
+            updates.append(f"{key} = ?")
+            params.append(value)
+    
+    if not updates:
+        conn.close()
+        return False
+    
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(lead_id)
+    
+    query = f"UPDATE contact_leads SET {', '.join(updates)} WHERE id = ?"
+    
+    try:
+        cursor.execute(query, params)
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error updating contact lead: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def list_contact_leads(contacted: bool = None, wants_contact: bool = None) -> list:
+    """List contact leads with optional filters"""
+    import json
+    
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    query = "SELECT * FROM contact_leads WHERE 1=1"
+    params = []
+    
+    if contacted is not None:
+        query += " AND contacted = ?"
+        params.append(1 if contacted else 0)
+    
+    if wants_contact is not None:
+        query += " AND wants_contact = ?"
+        params.append(1 if wants_contact else 0)
+    
+    query += " ORDER BY created_at DESC"
+    
+    cursor.execute(query, tuple(params))
+    results = cursor.fetchall()
+    conn.close()
+    
+    columns = [desc[0] for desc in cursor.description]
+    leads = []
+    
+    for row in results:
+        lead = dict(zip(columns, row))
+        # Parse JSON fields
+        if lead.get("profile_data"):
+            try:
+                lead["profile_data"] = json.loads(lead["profile_data"])
+            except:
+                pass
+        if lead.get("recommendation_data"):
+            try:
+                lead["recommendation_data"] = json.loads(lead["recommendation_data"])
+            except:
+                pass
+        leads.append(lead)
+    
+    return leads
+
+# CRUD Operations for 'satisfaction_surveys' table
+def create_satisfaction_survey(
+    session_id: str = None,
+    question_1: str = None,
+    answer_1: str = None,
+    question_2: str = None,
+    answer_2: str = None,
+    question_3: str = None,
+    answer_3: str = None,
+    overall_satisfaction: int = None,
+    comments: str = None
+) -> int:
+    """Create a new satisfaction survey response"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT INTO satisfaction_surveys 
+            (session_id, question_1, answer_1, question_2, answer_2, 
+             question_3, answer_3, overall_satisfaction, comments)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (session_id, question_1, answer_1, question_2, answer_2,
+              question_3, answer_3, overall_satisfaction, comments))
+        
+        survey_id = cursor.lastrowid
+        conn.commit()
+        return survey_id
+    except Exception as e:
+        print(f"Error creating satisfaction survey: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def list_satisfaction_surveys(limit: int = None) -> list:
+    """List satisfaction surveys"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    query = "SELECT * FROM satisfaction_surveys ORDER BY created_at DESC"
+    if limit:
+        query += f" LIMIT {limit}"
+    
+    cursor.execute(query)
+    results = cursor.fetchall()
+    conn.close()
+    
+    columns = [desc[0] for desc in cursor.description]
+    return [dict(zip(columns, row)) for row in results]
+
+def get_satisfaction_statistics() -> dict:
+    """Get statistics from satisfaction surveys"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    # Total surveys
+    cursor.execute("SELECT COUNT(*) FROM satisfaction_surveys")
+    total = cursor.fetchone()[0]
+    
+    # Average satisfaction
+    cursor.execute("SELECT AVG(overall_satisfaction) FROM satisfaction_surveys WHERE overall_satisfaction IS NOT NULL")
+    avg_satisfaction = cursor.fetchone()[0]
+    
+    # Satisfaction distribution
+    cursor.execute("""
+        SELECT overall_satisfaction, COUNT(*) as count
+        FROM satisfaction_surveys
+        WHERE overall_satisfaction IS NOT NULL
+        GROUP BY overall_satisfaction
+        ORDER BY overall_satisfaction DESC
+    """)
+    distribution = {row[0]: row[1] for row in cursor.fetchall()}
+    
+    conn.close()
+    
+    return {
+        "total_surveys": total,
+        "average_satisfaction": round(avg_satisfaction, 2) if avg_satisfaction else None,
+        "distribution": distribution
+    }
 
 if __name__ == "__main__":
     init_database()

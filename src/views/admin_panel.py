@@ -51,10 +51,12 @@ def admin_panel():
             st.rerun()
     
     # Tabs for different management sections
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "[BOOKS] Documentos", 
         "[🎓] Programas Posgrado", 
         "[DATA] Estadísticas", 
+        "[👥] Usuarios a Contactar",
+        "[📊] Encuestas Satisfacción",
         "[SETTINGS] Configuración", 
         "[DEBUG] Trazabilidad"
     ])
@@ -65,7 +67,7 @@ def admin_panel():
     with tab2:
         manage_posgrado_programs()
     
-    with tab5:
+    with tab7:
         from views.tracing_panel import display_tracing_panel
         display_tracing_panel()
     
@@ -73,6 +75,12 @@ def admin_panel():
         show_statistics()
     
     with tab4:
+        show_contact_leads()
+    
+    with tab5:
+        show_satisfaction_surveys()
+    
+    with tab6:
         show_settings()
 
 def manage_documents():
@@ -606,6 +614,186 @@ def upload_program_file():
                             os.remove(temp_file_path)
                     except:
                         pass
+
+def show_contact_leads():
+    """Mostrar usuarios a contactar"""
+    from models.db import list_contact_leads, update_contact_lead
+    
+    st.subheader("👥 Usuarios a Contactar")
+    
+    # Filtros
+    col1, col2 = st.columns(2)
+    with col1:
+        filter_contacted = st.selectbox(
+            "Filtrar por estado de contacto:",
+            ["Todos", "Pendientes", "Contactados"]
+        )
+    with col2:
+        filter_email = st.selectbox(
+            "Filtrar por email enviado:",
+            ["Todos", "Enviados", "No enviados"]
+        )
+    
+    # Obtener leads
+    contacted_filter = None
+    if filter_contacted == "Pendientes":
+        contacted_filter = False
+    elif filter_contacted == "Contactados":
+        contacted_filter = True
+    
+    leads = list_contact_leads(contacted=contacted_filter)
+    
+    # Filtrar por email enviado
+    if filter_email == "Enviados":
+        leads = [l for l in leads if l.get("email_sent", 0) == 1]
+    elif filter_email == "No enviados":
+        leads = [l for l in leads if l.get("email_sent", 0) == 0]
+    
+    st.write(f"**Total de leads:** {len(leads)}")
+    st.markdown("---")
+    
+    if leads:
+        for lead in leads:
+            lead_id = lead.get("id")
+            email = lead.get("email", "N/A")
+            name = lead.get("name", "Sin nombre")
+            wants_contact = lead.get("wants_contact", 0) == 1
+            email_sent = lead.get("email_sent", 0) == 1
+            contacted = lead.get("contacted", 0) == 1
+            created_at = lead.get("created_at", "")
+            
+            status_color = "🟢" if contacted else "🟡" if wants_contact else "⚪"
+            email_status = "✅" if email_sent else "❌"
+            
+            with st.expander(f"{status_color} **{name}** ({email}) - {created_at[:10] if created_at else 'N/A'}", expanded=False):
+                col1, col2 = st.columns([0.7, 0.3])
+                
+                with col1:
+                    st.write(f"**Email:** {email}")
+                    st.write(f"**Nombre:** {name}")
+                    st.write(f"**Email enviado:** {email_status}")
+                    st.write(f"**Quiere contacto:** {'✅ Sí' if wants_contact else '❌ No'}")
+                    st.write(f"**Contactado:** {'✅ Sí' if contacted else '❌ No'}")
+                    
+                    # Mostrar información del perfil si está disponible
+                    profile_data = lead.get("profile_data")
+                    if profile_data and isinstance(profile_data, dict):
+                        st.markdown("#### 📋 Información del Perfil:")
+                        academico = profile_data.get("academico", {})
+                        laboral = profile_data.get("laboral", {})
+                        objetivos = profile_data.get("objetivos", {})
+                        
+                        if academico.get("titulo_pregrado"):
+                            st.write(f"- **Formación:** {academico.get('titulo_pregrado')}")
+                        if laboral.get("sector"):
+                            st.write(f"- **Sector laboral:** {laboral.get('sector')}")
+                        if objetivos.get("meta_principal"):
+                            st.write(f"- **Objetivo:** {objetivos.get('meta_principal')}")
+                    
+                    # Mostrar recomendación si está disponible
+                    recommendation_data = lead.get("recommendation_data")
+                    if recommendation_data and isinstance(recommendation_data, dict):
+                        top_matches = recommendation_data.get("top_matches", [])
+                        if top_matches:
+                            st.markdown("#### 🎓 Programas Recomendados:")
+                            for i, match in enumerate(top_matches[:3], 1):
+                                st.write(f"{i}. {match.get('program_name', 'N/A')} (Afinidad: {match.get('score', 0)}/100)")
+                
+                with col2:
+                    if not contacted and wants_contact:
+                        if st.button("✅ Marcar como Contactado", key=f"contact_{lead_id}"):
+                            try:
+                                update_contact_lead(lead_id, contacted=True)
+                                st.success("Lead marcado como contactado")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                    
+                    if st.button("📧 Ver Detalles", key=f"details_{lead_id}"):
+                        st.json({
+                            "email": email,
+                            "name": name,
+                            "wants_contact": wants_contact,
+                            "email_sent": email_sent,
+                            "contacted": contacted,
+                            "created_at": created_at
+                        })
+    else:
+        st.info("No hay usuarios a contactar en este momento.")
+
+def show_satisfaction_surveys():
+    """Mostrar encuestas de satisfacción"""
+    from models.db import list_satisfaction_surveys, get_satisfaction_statistics
+    
+    st.subheader("📊 Encuestas de Satisfacción")
+    
+    # Estadísticas generales
+    stats = get_satisfaction_statistics()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Encuestas", stats.get("total_surveys", 0))
+    with col2:
+        avg_sat = stats.get("average_satisfaction")
+        if avg_sat:
+            st.metric("Satisfacción Promedio", f"{avg_sat:.2f}/5")
+        else:
+            st.metric("Satisfacción Promedio", "N/A")
+    with col3:
+        distribution = stats.get("distribution", {})
+        if distribution:
+            max_rating = max(distribution.keys())
+            st.metric("Calificación Más Frecuente", f"{max_rating}/5")
+        else:
+            st.metric("Calificación Más Frecuente", "N/A")
+    
+    st.markdown("---")
+    
+    # Distribución de calificaciones
+    if distribution:
+        st.markdown("### Distribución de Calificaciones")
+        import pandas as pd
+        
+        df_dist = pd.DataFrame([
+            {"Calificación": k, "Cantidad": v}
+            for k, v in sorted(distribution.items())
+        ])
+        
+        st.bar_chart(df_dist.set_index("Calificación"))
+    
+    st.markdown("---")
+    
+    # Lista de encuestas
+    st.markdown("### 📋 Respuestas Individuales")
+    
+    surveys = list_satisfaction_surveys(limit=50)
+    
+    if surveys:
+        st.write(f"**Mostrando:** {len(surveys)} encuestas (últimas 50)")
+        
+        for survey in surveys:
+            survey_id = survey.get("id")
+            created_at = survey.get("created_at", "")
+            answer_1 = survey.get("answer_1", "N/A")
+            answer_2 = survey.get("answer_2", "N/A")
+            answer_3 = survey.get("answer_3", "N/A")
+            overall = survey.get("overall_satisfaction", "N/A")
+            comments = survey.get("comments", "")
+            
+            with st.expander(f"Encuesta #{survey_id} - {created_at[:10] if created_at else 'N/A'}", expanded=False):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**1. Satisfacción con recomendaciones:** {answer_1}/5")
+                    st.write(f"**2. Facilidad de uso:** {answer_2}/5")
+                    st.write(f"**3. Recomendaría el sistema:** {answer_3}/5")
+                
+                with col2:
+                    st.write(f"**Satisfacción general:** {overall}/5" if overall != "N/A" else "**Satisfacción general:** N/A")
+                    if comments:
+                        st.write(f"**Comentarios:** {comments}")
+    else:
+        st.info("No hay encuestas de satisfacción registradas aún.")
 
 if __name__ == "__main__":
     admin_panel()

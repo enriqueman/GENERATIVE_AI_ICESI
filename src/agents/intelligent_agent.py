@@ -138,8 +138,20 @@ class IntelligentAgent:
                 response = self._analyze_and_recommend(session_id)
 
             elif session_state == "RECOMMENDING":
-                # Ya hay recomendación → Responder preguntas adicionales
-                response = self._answer_followup_question(session_id, query)
+                # Ya hay recomendación → Iniciar flujo post-recomendación
+                response = self._handle_post_recommendation_flow(session_id, query)
+            
+            elif session_state == "ASKING_EMAIL":
+                # Preguntando si quiere recibir por email
+                response = self._handle_email_request(session_id, query)
+            
+            elif session_state == "ASKING_CONTACT":
+                # Preguntando si quiere ser contactado
+                response = self._handle_contact_request(session_id, query)
+            
+            elif session_state == "SURVEY":
+                # Encuesta de satisfacción
+                response = self._handle_satisfaction_survey(session_id, query)
 
             else:
                 response = "Lo siento, hubo un error. ¿Quieres empezar de nuevo?"
@@ -184,10 +196,18 @@ class IntelligentAgent:
         - INTERVIEWING: Entrevista en curso
         - ANALYZING: Entrevista completa, analizando perfil
         - RECOMMENDING: Ya se generó recomendación, puede hacer preguntas
+        - ASKING_EMAIL: Preguntando si quiere recibir por email
+        - ASKING_CONTACT: Preguntando si quiere ser contactado
+        - SURVEY: Encuesta de satisfacción
 
         Returns:
             str: Estado de la sesión
         """
+        # Verificar estados del flujo post-recomendación
+        post_recommendation_state = get_interview_data(session_id, "post_recommendation_state")
+        if post_recommendation_state:
+            return post_recommendation_state
+        
         # Verificar si hay entrevista completa
         interview_complete = check_interview_complete(session_id)
 
@@ -535,7 +555,10 @@ class IntelligentAgent:
                 level="INFO"
             )
 
-            return recommendation
+            # Iniciar flujo post-recomendación: preguntar si quiere recibir por email
+            store_interview_data(session_id, "post_recommendation_state", "ASKING_EMAIL")
+            
+            return recommendation + "\n\n---\n\n📧 ¿Te gustaría recibir esta recomendación por correo electrónico? Responde 'sí' o 'no'."
 
         except Exception as e:
             print(f"[ERROR] Error analyzing and recommending: {e}")
@@ -588,6 +611,202 @@ Estaremos encantados de ayudarte personalmente."""
 Si necesitas información detallada, no dudes en contactar admisiones:
 📧 admisiones.posgrados@icesi.edu.co
 📱 WhatsApp: +57 318 765 4321"""
+
+    def _handle_post_recommendation_flow(self, session_id: str, query: str) -> str:
+        """Iniciar flujo post-recomendación: preguntar si quiere recibir por email"""
+        # Si el usuario hace una pregunta, responderla primero
+        if any(word in query.lower() for word in ["qué", "cuál", "cómo", "cuándo", "dónde", "información", "detalle", "pregunta"]):
+            return self._answer_followup_question(session_id, query)
+        
+        # Si no, iniciar el flujo de email
+        store_interview_data(session_id, "post_recommendation_state", "ASKING_EMAIL")
+        return "📧 ¿Te gustaría recibir esta recomendación por correo electrónico? Responde 'sí' o 'no'."
+
+    def _handle_email_request(self, session_id: str, query: str) -> str:
+        """Manejar solicitud de envío por email"""
+        from tools.chat_memory import retrieve_chat_memory
+        from tools.email_service import get_email_service
+        from models.db import create_contact_lead, update_contact_lead
+        
+        query_lower = query.lower().strip()
+        wants_email = any(word in query_lower for word in ["sí", "si", "yes", "s", "quiero", "deseo", "envía", "envia"])
+        
+        if wants_email:
+            # Obtener email y nombre
+            email_memory = retrieve_chat_memory(session_id, "email")
+            name_memory = retrieve_chat_memory(session_id, "name")
+            
+            email = email_memory.get("memory_value") if email_memory.get("found") else None
+            name = name_memory.get("memory_value") if name_memory.get("found") else "Estudiante"
+            
+            if not email:
+                # Intentar obtener del perfil
+                profile = get_interview_data(session_id, "profile")
+                if profile:
+                    email = profile.get("informacion_personal", {}).get("email")
+                    name = profile.get("informacion_personal", {}).get("nombre") or name
+            
+            if email:
+                # Obtener recomendación y programas
+                recommendation = get_interview_data(session_id, "recommendation")
+                profiler_results = get_interview_data(session_id, "profiler_results")
+                programs = profiler_results.get("top_matches", []) if profiler_results else []
+                
+                # Enviar email
+                email_service = get_email_service()
+                email_sent = email_service.send_recommendation_email(
+                    email=email,
+                    name=name or "Estudiante",
+                    recommendation=recommendation or "",
+                    programs=programs
+                )
+                
+                if email_sent:
+                    # Guardar en contact_leads
+                    try:
+                        create_contact_lead(
+                            email=email,
+                            name=name,
+                            profile_data=profile,
+                            recommendation_data=profiler_results,
+                            email_sent=True
+                        )
+                    except:
+                        pass
+                    
+                    # Continuar con pregunta de contacto
+                    store_interview_data(session_id, "post_recommendation_state", "ASKING_CONTACT")
+                    return f"✅ ¡Perfecto! He enviado tu recomendación a {email}.\n\n📞 ¿Te gustaría que un especialista de admisiones te contacte para ayudarte con más información? Responde 'sí' o 'no'."
+                else:
+                    return "❌ Hubo un error al enviar el correo. Por favor, verifica tu dirección de correo o contacta directamente a admisiones: 📧 admisiones.posgrados@icesi.edu.co"
+            else:
+                return "❌ No pude encontrar tu correo electrónico. Por favor, compártelo nuevamente."
+        else:
+            # No quiere email, preguntar directamente por contacto
+            store_interview_data(session_id, "post_recommendation_state", "ASKING_CONTACT")
+            return "Entendido. 📞 ¿Te gustaría que un especialista de admisiones te contacte para ayudarte con más información? Responde 'sí' o 'no'."
+
+    def _handle_contact_request(self, session_id: str, query: str) -> str:
+        """Manejar solicitud de contacto por especialista"""
+        from tools.chat_memory import retrieve_chat_memory
+        from models.db import create_contact_lead, update_contact_lead
+        
+        query_lower = query.lower().strip()
+        wants_contact = any(word in query_lower for word in ["sí", "si", "yes", "s", "quiero", "deseo", "contacta", "contacto"])
+        
+        # Obtener información del usuario
+        email_memory = retrieve_chat_memory(session_id, "email")
+        name_memory = retrieve_chat_memory(session_id, "name")
+        
+        email = email_memory.get("memory_value") if email_memory.get("found") else None
+        name = name_memory.get("memory_value") if name_memory.get("found") else None
+        
+        profile = get_interview_data(session_id, "profile")
+        if profile:
+            email = email or profile.get("informacion_personal", {}).get("email")
+            name = name or profile.get("informacion_personal", {}).get("nombre")
+        
+        profiler_results = get_interview_data(session_id, "profiler_results")
+        
+        if wants_contact:
+            # Guardar en contact_leads
+            if email:
+                try:
+                    # Verificar si ya existe
+                    from models.db import list_contact_leads
+                    existing_leads = list_contact_leads()
+                    existing = next((l for l in existing_leads if l.get("email") == email), None)
+                    
+                    if existing:
+                        update_contact_lead(existing["id"], wants_contact=True, contacted=False)
+                    else:
+                        create_contact_lead(
+                            email=email,
+                            name=name,
+                            profile_data=profile,
+                            recommendation_data=profiler_results,
+                            wants_contact=True,
+                            email_sent=False
+                        )
+                except Exception as e:
+                    print(f"[ERROR] Error saving contact lead: {e}")
+            
+            # Iniciar encuesta
+            store_interview_data(session_id, "post_recommendation_state", "SURVEY")
+            store_interview_data(session_id, "survey_question", 1)
+            
+            return "✅ Perfecto. Tu información ha sido guardada y un especialista te contactará pronto.\n\n📋 Ahora me gustaría conocer tu opinión sobre el sistema. Por favor, responde las siguientes preguntas:\n\n**1. ¿Qué tan satisfecho estás con las recomendaciones recibidas?**\n(Responde con un número del 1 al 5, donde 1 es muy insatisfecho y 5 es muy satisfecho)"
+        else:
+            # No quiere contacto, ir directamente a encuesta
+            store_interview_data(session_id, "post_recommendation_state", "SURVEY")
+            store_interview_data(session_id, "survey_question", 1)
+            
+            return "Entendido. 📋 Me gustaría conocer tu opinión sobre el sistema. Por favor, responde las siguientes preguntas:\n\n**1. ¿Qué tan satisfecho estás con las recomendaciones recibidas?**\n(Responde con un número del 1 al 5, donde 1 es muy insatisfecho y 5 es muy satisfecho)"
+
+    def _handle_satisfaction_survey(self, session_id: str, query: str) -> str:
+        """Manejar encuesta de satisfacción"""
+        from models.db import create_satisfaction_survey
+        
+        current_question = get_interview_data(session_id, "survey_question") or 1
+        
+        # Guardar respuesta de la pregunta actual
+        if current_question == 1:
+            # Pregunta 1: Satisfacción general
+            try:
+                satisfaction = int(query.strip()[0])  # Tomar primer dígito
+                if 1 <= satisfaction <= 5:
+                    store_interview_data(session_id, "survey_answer_1", satisfaction)
+                    store_interview_data(session_id, "survey_question", 2)
+                    return "**2. ¿Qué tan fácil fue usar el sistema?**\n(Responde con un número del 1 al 5, donde 1 es muy difícil y 5 es muy fácil)"
+                else:
+                    return "Por favor, responde con un número del 1 al 5."
+            except:
+                return "Por favor, responde con un número del 1 al 5."
+        
+        elif current_question == 2:
+            # Pregunta 2: Facilidad de uso
+            try:
+                ease = int(query.strip()[0])
+                if 1 <= ease <= 5:
+                    store_interview_data(session_id, "survey_answer_2", ease)
+                    store_interview_data(session_id, "survey_question", 3)
+                    return "**3. ¿Recomendarías este sistema a otros estudiantes?**\n(Responde con un número del 1 al 5, donde 1 es definitivamente no y 5 es definitivamente sí)"
+                else:
+                    return "Por favor, responde con un número del 1 al 5."
+            except:
+                return "Por favor, responde con un número del 1 al 5."
+        
+        elif current_question == 3:
+            # Pregunta 3: Recomendación
+            try:
+                recommendation = int(query.strip()[0])
+                if 1 <= recommendation <= 5:
+                    # Guardar todas las respuestas
+                    answer_1 = get_interview_data(session_id, "survey_answer_1")
+                    answer_2 = get_interview_data(session_id, "survey_answer_2")
+                    
+                    create_satisfaction_survey(
+                        session_id=session_id,
+                        question_1="¿Qué tan satisfecho estás con las recomendaciones recibidas?",
+                        answer_1=str(answer_1) if answer_1 else None,
+                        question_2="¿Qué tan fácil fue usar el sistema?",
+                        answer_2=str(answer_2) if answer_2 else None,
+                        question_3="¿Recomendarías este sistema a otros estudiantes?",
+                        answer_3=str(recommendation),
+                        overall_satisfaction=answer_1 if answer_1 else None
+                    )
+                    
+                    # Limpiar estado
+                    store_interview_data(session_id, "post_recommendation_state", None)
+                    store_interview_data(session_id, "survey_question", None)
+                    
+                    return "✅ ¡Gracias por tu feedback! Tu opinión es muy valiosa para nosotros.\n\nSi tienes más preguntas sobre los programas recomendados, no dudes en contactarnos:\n📧 admisiones.posgrados@icesi.edu.co\n📱 WhatsApp: +57 318 765 4321\n\n¡Éxito en tu proceso de admisión! 🎓"
+                else:
+                    return "Por favor, responde con un número del 1 al 5."
+            except:
+                return "Por favor, responde con un número del 1 al 5."
+        
+        return "Gracias por completar la encuesta."
 
     def _handle_authentication(self, query: str, session_id: str = "default_session", trace_id: str = None) -> str:
         """

@@ -295,8 +295,15 @@ Tu tarea es seleccionar la mejor pregunta siguiente para hacer al candidato, bas
 2. Las preguntas ya respondidas
 3. La importancia de cada pregunta para construir un perfil completo
 
+IMPORTANTE: 
+- Prioriza terminar la entrevista lo antes posible cuando tengas información suficiente
+- Un perfil está completo si tiene: título académico, sector laboral, objetivos principales, e intereses
+- Si el perfil tiene estos 4 elementos críticos, responde "COMPLETO" inmediatamente
+- Si faltan 1-2 elementos críticos, selecciona preguntas que los cubran
+- Evita hacer preguntas redundantes o de bajo valor
+
 Responde SOLO con el ID de la pregunta que consideras más apropiada en este momento.
-Si el perfil está completo, responde "COMPLETO"."""),
+Si el perfil está completo (tiene información suficiente para generar recomendaciones), responde "COMPLETO"."""),
                 ("user", """Perfil actual del candidato:
 {profile_summary}
 
@@ -305,7 +312,7 @@ Preguntas ya respondidas: {answered_ids}
 Preguntas disponibles:
 {questions_text}
 
-¿Cuál es la mejor pregunta siguiente? Responde solo con el ID.""")
+¿Cuál es la mejor pregunta siguiente? Responde solo con el ID. Si el perfil está completo, responde "COMPLETO".""")
             ])
             
             chain = prompt | self.llm
@@ -550,46 +557,60 @@ Preguntas disponibles:
 
     def _is_profile_complete(self, profile: Dict, answered_questions_count: int = 0) -> bool:
         """
-        Verificar si el perfil está completo basándose en campos requeridos
+        Verificar si el perfil está completo basándose en campos requeridos.
+        Optimizado para terminar la entrevista lo antes posible con información suficiente.
         
         Args:
             profile: Perfil del estudiante
             answered_questions_count: Número de preguntas respondidas
         
         Returns:
-            True si el perfil tiene información suficiente
+            True si el perfil tiene información suficiente para generar recomendaciones
         """
-        # MÍNIMO: Debe tener al menos 5 preguntas respondidas
-        if answered_questions_count < 5:
+        # MÍNIMO: Debe tener al menos 4 preguntas respondidas (reducido de 5)
+        if answered_questions_count < 4:
             return False
         
-        # Verificar información básica crítica
-        has_name = profile.get("informacion_personal", {}).get("nombre") is not None
-        has_academic = profile.get("academico", {}).get("titulo_pregrado") is not None
-        has_laboral = profile.get("laboral", {}).get("sector") is not None
-        has_objetivos = profile.get("objetivos", {}).get("meta_principal") is not None
+        # Verificar información básica crítica (mínimo necesario para recomendaciones)
+        academico = profile.get("academico", {})
+        laboral = profile.get("laboral", {})
+        objetivos = profile.get("objetivos", {})
+        intereses = profile.get("intereses", {})
         
-        # Si tiene lo básico y al menos 5 preguntas, puede estar completo
-        basic_complete = has_name and has_academic and has_laboral and has_objetivos
+        # Campos críticos mínimos:
+        has_academic = academico.get("titulo_pregrado") is not None
+        has_laboral = laboral.get("sector") is not None or laboral.get("cargo") is not None
+        has_objetivos = objetivos.get("meta_principal") is not None
+        has_intereses = intereses.get("areas") is not None or intereses.get("temas_clave") is not None
         
-        if not basic_complete:
-            return False
+        # Si tiene al menos 3 de los 4 campos críticos y mínimo 4 preguntas, está completo
+        critical_fields = sum([has_academic, has_laboral, has_objetivos, has_intereses])
         
-        # Si tiene lo básico, verificar que tenga al menos información en 3 categorías principales
+        if critical_fields >= 3 and answered_questions_count >= 4:
+            return True
+        
+        # Si tiene todos los campos críticos y al menos 5 preguntas, definitivamente completo
+        if critical_fields >= 4 and answered_questions_count >= 5:
+            return True
+        
+        # Verificación adicional: si tiene información en múltiples categorías
         categories_with_data = 0
-        if profile.get("academico", {}).get("titulo_pregrado"):
+        if academico.get("titulo_pregrado"):
             categories_with_data += 1
-        if profile.get("laboral", {}).get("sector"):
+        if laboral.get("sector") or laboral.get("cargo"):
             categories_with_data += 1
-        if profile.get("objetivos", {}).get("meta_principal"):
+        if objetivos.get("meta_principal"):
             categories_with_data += 1
-        if profile.get("intereses", {}).get("areas"):
+        if intereses.get("areas") or intereses.get("temas_clave"):
             categories_with_data += 1
         if profile.get("logistica", {}).get("modalidad_preferida"):
             categories_with_data += 1
         
-        # Si tiene al menos 3 categorías con datos y mínimo 5 preguntas, está completo
-        return categories_with_data >= 3
+        # Si tiene información en al menos 3 categorías y mínimo 5 preguntas, está completo
+        if categories_with_data >= 3 and answered_questions_count >= 5:
+            return True
+        
+        return False
 
     def _extract_info_from_answer(self, answer: str, question_config: Dict, current_profile: Dict) -> Dict[str, Any]:
         """

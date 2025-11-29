@@ -162,19 +162,25 @@ class ProfilerAgent:
             # Paso 4: Rankear programas
             ranked_programs = sorted(program_scores, key=lambda x: x["score"], reverse=True)
             
+            # Filtrar programas con afinidad >= 45 (umbral mínimo)
+            MIN_AFFINITY_THRESHOLD = 45.0
+            filtered_programs = [p for p in ranked_programs if p["score"] >= MIN_AFFINITY_THRESHOLD]
+            
             if tracer:
                 tracer.log(
                     operation="PROGRAMS_RANKED",
-                    message=f"Programas rankeados: {len(ranked_programs)}",
+                    message=f"Programas rankeados: {len(ranked_programs)}, filtrados (>=45): {len(filtered_programs)}",
                     metadata={
-                        "top_3_scores": [p["score"] for p in ranked_programs[:3]],
-                        "top_3_names": [p["program_name"] for p in ranked_programs[:3]]
+                        "total_programs": len(ranked_programs),
+                        "filtered_programs": len(filtered_programs),
+                        "top_3_scores": [p["score"] for p in filtered_programs[:3]] if filtered_programs else [],
+                        "top_3_names": [p["program_name"] for p in filtered_programs[:3]] if filtered_programs else []
                     },
                     level="INFO"
                 )
 
-            # Paso 5: Obtener detalles de los top 3 programas
-            top_matches = self._enrich_top_matches(ranked_programs[:3], profile_features)
+            # Paso 5: Obtener detalles de los top programas (máximo 3, solo si tienen afinidad >= 45)
+            top_matches = self._enrich_top_matches(filtered_programs[:3], profile_features) if filtered_programs else []
 
             # Paso 5: Generar resumen del perfil
             profile_summary = self._generate_profile_summary(student_profile, profile_features)

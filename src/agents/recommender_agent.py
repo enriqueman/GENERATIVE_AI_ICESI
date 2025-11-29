@@ -196,10 +196,19 @@ Programas analizados:
 Genera una recomendación personalizada y motivadora. SIEMPRE usa el nombre del candidato en el saludo.""")
             ])
 
+            # Extraer nombre del perfil
+            nombre = (
+                student_profile.get("informacion_personal", {}).get("nombre") or
+                "Estudiante"
+            )
+            if not nombre or nombre == "None" or str(nombre).strip() == "":
+                nombre = "Estudiante"
+            
             # Generar recomendación
             chain = prompt | self.llm
             response = chain.invoke({
                 "profile_summary": profile_summary,
+                "nombre": nombre,
                 "programs_info": programs_text
             })
 

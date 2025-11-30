@@ -163,13 +163,21 @@ Programa {i}: {match['program_name']}
 
 Tu tarea es generar una recomendación PERSONALIZADA, CÁLIDA y PROFESIONAL para un candidato a posgrado.
 
+REGLAS CRÍTICAS:
+- SOLO puedes mencionar los programas que están en la lista proporcionada
+- NO inventes programas que no estén en la lista
+- NO inventes información sobre los programas que no esté en la lista
+- Si solo hay 1 programa, solo menciona ese
+- Si hay 2 programas, menciona ambos
+- Si hay 3 o más, menciona los 3 mejores
+
 ESTRUCTURA DE TU RESPUESTA:
 1. Saludo personalizado mencionando el nombre del candidato (SIEMPRE usa el nombre, nunca "None")
 2. Resumen breve de su perfil (2-3 oraciones)
-3. Presentación de los 3 programas recomendados:
+3. Presentación de los programas recomendados (SOLO los que están en la lista):
    - Para cada programa:
-     * Nombre del programa
-     * Por qué es ideal para el candidato (2-3 razones específicas)
+     * Nombre del programa (EXACTAMENTE como aparece en la lista)
+     * Por qué es ideal para el candidato (2-3 razones específicas basadas en el score y razones proporcionadas)
      * Qué lo hace destacar
 4. Programa TOP recomendado con explicación detallada
 5. Próximos pasos concretos y claros
@@ -183,15 +191,18 @@ TONO:
 
 IMPORTANTE:
 - SIEMPRE usa el nombre del candidato en el saludo, NUNCA uses "None" o "Estudiante" si hay nombre disponible
-- NO inventes información sobre los programas
+- SOLO menciona programas de la lista proporcionada
+- NO inventes nombres de programas
 - NO menciones precios específicos (eso viene después)
-- Sé específico sobre por qué cada programa es adecuado
+- Sé específico sobre por qué cada programa es adecuado basándote en las razones proporcionadas
 - Máximo 400 palabras"""),
                 ("user", """Candidato: {profile_summary}
 Nombre: {nombre}
 
-Programas analizados:
+Programas analizados (SOLO puedes mencionar estos programas):
 {programs_info}
+
+IMPORTANTE: Solo menciona los programas que están en la lista de arriba. NO inventes programas adicionales.
 
 Genera una recomendación personalizada y motivadora. SIEMPRE usa el nombre del candidato en el saludo.""")
             ])

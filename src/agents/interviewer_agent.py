@@ -312,6 +312,12 @@ Preguntas ya respondidas: {answered_ids}
 Preguntas disponibles:
 {questions_text}
 
+INSTRUCCIONES:
+- Selecciona preguntas que sean naturales y conversacionales
+- Prefiere preguntas abiertas que inviten a respuestas detalladas
+- Si el candidato ya ha dado información sobre un tema, no repitas preguntas similares
+- Haz que la conversación fluya de manera amena
+
 ¿Cuál es la mejor pregunta siguiente? Responde solo con el ID. Si el perfil está completo, responde "COMPLETO".""")
             ])
             
@@ -428,6 +434,15 @@ Preguntas disponibles:
             if not current_question_id:
                 current_question_id = current_question_data.get("id") or current_question_data.get("question_id")
 
+            # Obtener todas las preguntas para uso posterior
+            db_questions = self._get_questions_from_db()
+            rag_questions = self._get_questions_from_rag()
+            all_questions = {}
+            for q in db_questions:
+                all_questions[q.get("question_id", "")] = q
+            for q in rag_questions:
+                all_questions[q.get("id", "")] = q
+            
             # Si aún no hay, buscar la pregunta actual desde las disponibles
             if not current_question_id:
                 # Obtener todas las preguntas y seleccionar la primera no respondida
@@ -482,6 +497,40 @@ Preguntas disponibles:
 
             # Actualizar perfil con los datos extraídos
             profile = self._update_profile(profile, extracted_data, current_question_data)
+            
+            # Si la respuesta era larga y se extrajeron campos adicionales, actualizarlos también
+            additional_fields = extracted_data.get("additional_fields", [])
+            if additional_fields:
+                # Obtener todas las preguntas para buscar campos adicionales
+                db_questions = self._get_questions_from_db()
+                rag_questions = self._get_questions_from_rag()
+                all_questions = {}
+                for q in db_questions:
+                    all_questions[q.get("question_id", "")] = q
+                for q in rag_questions:
+                    all_questions[q.get("id", "")] = q
+                
+                for field_data in additional_fields:
+                    field = field_data.get("field")
+                    value = field_data.get("extracted_value")
+                    if field and value:
+                        # Crear un question_config temporal para el campo adicional
+                        temp_question = {
+                            "field": field,
+                            "validation": "text"
+                        }
+                        temp_extracted = {
+                            "extracted_value": value,
+                            "confidence": field_data.get("confidence", "medium")
+                        }
+                        profile = self._update_profile(profile, temp_extracted, temp_question)
+                        
+                        # Marcar como respondida si existe la pregunta
+                        for qid, q in all_questions.items():
+                            if q.get("field") == field:
+                                if str(qid) not in [str(aq) for aq in answered_questions]:
+                                    answered_questions.append(str(qid))
+                                    break
 
             # Guardar perfil actualizado
             store_interview_data(session_id, "profile", profile)
@@ -532,16 +581,19 @@ Preguntas disponibles:
             store_interview_data(session_id, "current_question_data", next_q)
 
             # Personalizar pregunta con el nombre si está disponible
-            next_question = next_q.get("question", "")
-            if "{nombre}" in next_question and profile.get("informacion_personal", {}).get("nombre"):
+            original_question = next_q.get("question", "")
+            if "{nombre}" in original_question and profile.get("informacion_personal", {}).get("nombre"):
                 nombre = profile["informacion_personal"]["nombre"].split()[0]  # Primer nombre
-                next_question = next_question.format(nombre=nombre)
+                original_question = original_question.format(nombre=nombre)
+            
+            # Hacer la pregunta más amena usando IA
+            next_question = self._make_question_amenable(original_question, profile)
 
             return {
                 "next_question": next_question,
                 "profile_complete": False,
                 "extracted_data": extracted_data,
-                "current_progress": f"{len(answered_questions)} preguntas completadas"
+                "current_progress": str(len(answered_questions))  # Solo el número
             }
 
         except Exception as e:
@@ -559,6 +611,7 @@ Preguntas disponibles:
         """
         Verificar si el perfil está completo basándose en campos requeridos.
         Optimizado para terminar la entrevista lo antes posible con información suficiente.
+        NO requiere un mínimo fijo de preguntas - si hay información suficiente, está completo.
         
         Args:
             profile: Perfil del estudiante
@@ -567,10 +620,6 @@ Preguntas disponibles:
         Returns:
             True si el perfil tiene información suficiente para generar recomendaciones
         """
-        # MÍNIMO: Debe tener al menos 4 preguntas respondidas (reducido de 5)
-        if answered_questions_count < 4:
-            return False
-        
         # Verificar información básica crítica (mínimo necesario para recomendaciones)
         academico = profile.get("academico", {})
         laboral = profile.get("laboral", {})
@@ -583,14 +632,24 @@ Preguntas disponibles:
         has_objetivos = objetivos.get("meta_principal") is not None
         has_intereses = intereses.get("areas") is not None or intereses.get("temas_clave") is not None
         
-        # Si tiene al menos 3 de los 4 campos críticos y mínimo 4 preguntas, está completo
+        # Contar campos críticos completos
         critical_fields = sum([has_academic, has_laboral, has_objetivos, has_intereses])
         
-        if critical_fields >= 3 and answered_questions_count >= 4:
+        # Si tiene todos los 4 campos críticos, está completo (sin importar número de preguntas)
+        if critical_fields >= 4:
             return True
         
-        # Si tiene todos los campos críticos y al menos 5 preguntas, definitivamente completo
-        if critical_fields >= 4 and answered_questions_count >= 5:
+        # Si tiene 3 de los 4 campos críticos Y al menos 3 preguntas respondidas, está completo
+        if critical_fields >= 3 and answered_questions_count >= 3:
+            return True
+        
+        # Si tiene información muy rica en 2 campos críticos (con detalles), puede estar completo
+        # Ejemplo: tiene formación + experiencia detallada + objetivos claros
+        rich_academic = has_academic and (academico.get("fortalezas") or academico.get("institucion"))
+        rich_laboral = has_laboral and (laboral.get("anos_experiencia") or laboral.get("responsabilidades"))
+        rich_objetivos = has_objetivos and (objetivos.get("razones") or objetivos.get("expectativas"))
+        
+        if (rich_academic and rich_laboral and rich_objetivos) and answered_questions_count >= 3:
             return True
         
         # Verificación adicional: si tiene información en múltiples categorías
@@ -615,6 +674,7 @@ Preguntas disponibles:
     def _extract_info_from_answer(self, answer: str, question_config: Dict, current_profile: Dict) -> Dict[str, Any]:
         """
         Extraer información estructurada de la respuesta usando LLM.
+        Si la respuesta es larga, analiza el contexto completo para extraer múltiples campos.
 
         Args:
             answer: Respuesta del usuario
@@ -626,17 +686,14 @@ Preguntas disponibles:
         """
         if not self.llm:
             # Fallback: extracción simple sin LLM
-            # Intentar extraer información básica del campo
             field = question_config.get("field", "")
             validation = question_config.get("validation", "text")
             
-            # Extracción básica según el tipo
             if validation == "number":
                 import re
                 numbers = re.findall(r'\d+', answer)
                 value = numbers[0] if numbers else answer
             elif validation == "list":
-                # Separar por comas o espacios
                 items = [item.strip() for item in answer.replace(",", " ").split() if item.strip()]
                 value = items if items else [answer]
             else:
@@ -648,42 +705,61 @@ Preguntas disponibles:
             }
 
         try:
-            # Crear prompt para extracción
+            # Detectar si la respuesta es larga (más de 50 palabras o contiene múltiples oraciones)
+            is_long_answer = len(answer.split()) > 50 or answer.count('.') > 2
+            
+            # Construir resumen del perfil actual ANTES de usarlo
+            profile_summary = self._profile_to_summary(current_profile)
+            
+            # Si es una respuesta larga, hacer análisis completo del contexto
+            if is_long_answer:
+                return self._extract_multiple_fields_from_long_answer(answer, question_config, current_profile)
+            
+            # Extracción normal para respuestas cortas (pero con contexto completo)
             extraction_prompt = ChatPromptTemplate.from_messages([
                 ("system", """Eres un asistente experto en extraer información estructurada de respuestas de candidatos a posgrados.
 
-Extrae la información relevante de la respuesta del usuario según el campo solicitado.
-Devuelve SOLO un JSON válido sin texto adicional.
+Tu tarea es extraer información relevante de la respuesta del usuario, considerando TODO el contexto de la conversación y el perfil construido hasta ahora.
 
 Campo solicitado: {field}
 Tipo de validación: {validation}
 
-Reglas de extracción:
+CONTEXTO DEL PERFIL ACTUAL:
+{profile_summary}
+
+INSTRUCCIONES:
+- Analiza la respuesta considerando el contexto completo del perfil
+- Si la respuesta menciona información relacionada con otros campos del perfil, anótalo en secondary_value
 - Si el campo es una lista, extrae múltiples items
-- Si es texto, resume la información clave
+- Si es texto, resume la información clave pero mantén los detalles importantes
 - Si es contacto, extrae email y teléfono
 - Si es numérico, extrae solo números
+- Usa el contexto del perfil para interpretar mejor la respuesta (ej: si ya mencionó su formación, usa ese contexto)
+
+IMPORTANTE: 
+- Construye el perfil de forma incremental con cada respuesta
+- Si detectas información adicional relevante, inclúyela en secondary_value
+- Sé preciso pero también captura información relacionada
 
 Formato de respuesta:
 {{
     "extracted_value": "valor principal extraído",
-    "secondary_value": "valor secundario si aplica",
+    "secondary_value": "información adicional o contexto relevante",
     "confidence": "high/medium/low"
 }}"""),
-                ("user", "Respuesta del usuario: {answer}")
+                ("user", "Respuesta del usuario: {answer}\n\nPregunta actual: {current_question}")
             ])
 
-            # Invocar LLM
             chain = extraction_prompt | self.llm
             response = chain.invoke({
                 "field": question_config.get("field", ""),
                 "validation": question_config.get("validation", "text"),
-                "answer": answer
+                "answer": answer,
+                "profile_summary": profile_summary,
+                "current_question": question_config.get("question", "")
             })
 
-            # Parsear respuesta JSON
             content = response.content
-            # Limpiar markdown si existe
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0]
             elif "```" in content:
@@ -694,8 +770,144 @@ Formato de respuesta:
 
         except Exception as e:
             print(f"[WARNING] LLM extraction failed: {e}")
-            # Fallback a extracción simple
             return {"extracted_value": answer, "confidence": "low"}
+
+    def _extract_multiple_fields_from_long_answer(self, answer: str, current_question: Dict, current_profile: Dict) -> Dict[str, Any]:
+        """
+        Analizar respuestas largas y extraer múltiples campos del perfil en paralelo.
+        
+        Args:
+            answer: Respuesta larga del usuario
+            current_question: Pregunta actual
+            current_profile: Perfil actual
+            
+        Returns:
+            Diccionario con información extraída (puede incluir múltiples campos)
+        """
+        if not self.llm:
+            # Fallback simple
+            return {
+                "extracted_value": answer[:200],
+                "confidence": "low"
+            }
+        
+        try:
+            # Obtener todas las preguntas disponibles para saber qué campos buscar
+            db_questions = self._get_questions_from_db()
+            rag_questions = self._get_questions_from_rag()
+            all_questions = {}
+            for q in db_questions:
+                all_questions[q.get("question_id", "")] = q
+            for q in rag_questions:
+                all_questions[q.get("id", "")] = q
+            
+            # Construir lista de campos relevantes que podrían estar en la respuesta
+            profile_summary = self._profile_to_summary(current_profile)
+            
+            # Identificar campos faltantes o incompletos
+            missing_fields = []
+            field_descriptions = []
+            
+            for qid, q in all_questions.items():
+                field = q.get("field", "")
+                if field:
+                    parts = field.split(".")
+                    if len(parts) == 2:
+                        category, subfield = parts
+                        current_value = current_profile.get(category, {}).get(subfield)
+                        if not current_value or (isinstance(current_value, str) and len(current_value.strip()) < 3):
+                            missing_fields.append(field)
+                            field_descriptions.append(f"{field}: {q.get('question', '')[:80]}")
+            
+            # Limitar a los 10 campos más relevantes
+            relevant_fields = missing_fields[:10]
+            fields_text = "\n".join(field_descriptions[:10])
+            
+            extraction_prompt = ChatPromptTemplate.from_messages([
+                ("system", """Eres un asistente experto en analizar respuestas extensas de candidatos a posgrados y extraer información estructurada.
+
+Tu tarea es analizar la respuesta del usuario y extraer TODA la información relevante que pueda responder múltiples preguntas del perfil.
+
+IMPORTANTE:
+- Analiza la respuesta completa, no solo el campo solicitado
+- Extrae información para múltiples campos si está disponible
+- Si la respuesta menciona información sobre formación, experiencia, objetivos, intereses, etc., extráela
+- Usa el contexto del perfil actual para entender mejor la información
+- Si no encuentras información para un campo, déjalo como null
+
+Campos que podrías encontrar en la respuesta:
+{fields_list}
+
+Perfil actual del candidato:
+{profile_summary}
+
+Formato de respuesta JSON:
+{{
+    "primary_field": {{
+        "field": "campo.principal",
+        "extracted_value": "valor extraído",
+        "confidence": "high/medium/low"
+    }},
+    "additional_fields": [
+        {{
+            "field": "campo.adicional",
+            "extracted_value": "valor",
+            "confidence": "high/medium/low"
+        }}
+    ],
+    "summary": "Resumen breve de lo que se extrajo"
+}}"""),
+                ("user", """Pregunta actual: {current_question}
+
+Respuesta del usuario: {answer}
+
+Analiza esta respuesta y extrae toda la información relevante que puedas identificar.""")
+            ])
+            
+            chain = extraction_prompt | self.llm
+            response = chain.invoke({
+                "current_question": current_question.get("question", ""),
+                "answer": answer,
+                "fields_list": fields_text,
+                "profile_summary": profile_summary
+            })
+            
+            content = response.content
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            result = json.loads(content.strip())
+            
+            # Retornar en formato compatible con el sistema actual
+            primary = result.get("primary_field", {})
+            if primary.get("field") == current_question.get("field"):
+                extracted = {
+                    "extracted_value": primary.get("extracted_value", answer[:200]),
+                    "secondary_value": result.get("summary", ""),
+                    "confidence": primary.get("confidence", "medium"),
+                    "additional_fields": result.get("additional_fields", [])
+                }
+            else:
+                # Si el campo principal no coincide, usar el primero disponible
+                extracted = {
+                    "extracted_value": primary.get("extracted_value", answer[:200]) if primary else answer[:200],
+                    "secondary_value": result.get("summary", ""),
+                    "confidence": "medium",
+                    "additional_fields": result.get("additional_fields", [])
+                }
+            
+            return extracted
+            
+        except Exception as e:
+            print(f"[WARNING] Error extracting multiple fields: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "extracted_value": answer[:200],
+                "confidence": "low"
+            }
 
     def _validate_answer(self, answer: str, question_config: Dict) -> Dict[str, Any]:
         """
@@ -808,6 +1020,68 @@ Formato de respuesta:
             True si está completa, False en caso contrario
         """
         return get_interview_data(session_id, "completed") or False
+    
+    def _make_question_amenable(self, original_question: str, profile: Dict) -> str:
+        """
+        Hacer la pregunta más amena y conversacional usando IA, sin demasiado texto.
+        
+        Args:
+            original_question: Pregunta original
+            profile: Perfil actual del estudiante
+            
+        Returns:
+            Pregunta más amena y conversacional
+        """
+        if not self.llm:
+            return original_question
+        
+        try:
+            nombre = profile.get("informacion_personal", {}).get("nombre", "")
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """Eres un asistente amigable que hace preguntas de manera conversacional y amena.
+
+Tu tarea es reformular una pregunta para que sea más amigable, natural y conversacional, pero SIN agregar demasiado texto.
+
+REGLAS:
+- Mantén la pregunta corta y directa (máximo 2 oraciones)
+- Hazla más amigable y conversacional
+- Usa un tono cálido pero profesional
+- NO agregues explicaciones largas
+- NO cambies el significado de la pregunta
+- Si hay un nombre, úsalo de manera natural
+
+Ejemplos:
+- "¿Cuál es tu título de pregrado?" → "¿Qué estudiaste en tu pregrado?"
+- "¿En qué sector trabajas?" → "¿En qué área te desempeñas profesionalmente?"
+- "¿Cuáles son tus objetivos?" → "¿Qué te gustaría lograr con un posgrado?"
+
+Responde SOLO con la pregunta reformulada, sin texto adicional."""),
+                ("user", """Pregunta original: {original_question}
+Nombre del candidato: {nombre}
+
+Reformula esta pregunta de manera más amena y conversacional, manteniéndola corta.""")
+            ])
+            
+            chain = prompt | self.llm
+            response = chain.invoke({
+                "original_question": original_question,
+                "nombre": nombre if nombre else "el candidato"
+            })
+            
+            improved_question = response.content.strip()
+            
+            # Limpiar si tiene comillas o markdown
+            if improved_question.startswith('"') and improved_question.endswith('"'):
+                improved_question = improved_question[1:-1]
+            if improved_question.startswith("'") and improved_question.endswith("'"):
+                improved_question = improved_question[1:-1]
+            
+            return improved_question
+            
+        except Exception as e:
+            print(f"[WARNING] Error making question amenable: {e}")
+            return original_question
 
 
 # Singleton instance

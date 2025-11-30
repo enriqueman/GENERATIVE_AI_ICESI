@@ -162,17 +162,18 @@ class ProfilerAgent:
             # Paso 4: Rankear programas
             ranked_programs = sorted(program_scores, key=lambda x: x["score"], reverse=True)
             
-            # Filtrar programas con afinidad >= 45 (umbral mínimo)
-            MIN_AFFINITY_THRESHOLD = 45.0
+            # Filtrar programas con afinidad >= 51 (umbral mínimo)
+            MIN_AFFINITY_THRESHOLD = 51.0
             filtered_programs = [p for p in ranked_programs if p["score"] >= MIN_AFFINITY_THRESHOLD]
             
             if tracer:
                 tracer.log(
                     operation="PROGRAMS_RANKED",
-                    message=f"Programas rankeados: {len(ranked_programs)}, filtrados (>=45): {len(filtered_programs)}",
+                    message=f"Programas rankeados: {len(ranked_programs)}, filtrados (>=51): {len(filtered_programs)}",
                     metadata={
                         "total_programs": len(ranked_programs),
                         "filtered_programs": len(filtered_programs),
+                        "min_affinity_threshold": MIN_AFFINITY_THRESHOLD,
                         "top_3_scores": [p["score"] for p in filtered_programs[:3]] if filtered_programs else [],
                         "top_3_names": [p["program_name"] for p in filtered_programs[:3]] if filtered_programs else []
                     },

@@ -19,7 +19,7 @@ from utils.tracing import tracer
 from agents.interviewer_agent import get_interviewer
 from agents.profiler_agent import get_profiler
 from agents.recommender_agent import get_recommender
-from tools.chat_memory import get_interview_data, check_interview_complete
+from tools.chat_memory import get_interview_data, check_interview_complete, store_interview_data
 
 # Importar LangSmith para trazas
 try:
@@ -212,9 +212,18 @@ class IntelligentAgent:
         interview_complete = check_interview_complete(session_id)
 
         if interview_complete:
+            # Verificar estados del flujo post-recomendación primero (tiene prioridad)
+            post_recommendation_state = get_interview_data(session_id, "post_recommendation_state")
+            if post_recommendation_state:
+                return post_recommendation_state
+            
             # Verificar si ya se generó recomendación
             recommendation = get_interview_data(session_id, "recommendation")
             if recommendation:
+                # Si hay recomendación pero no hay estado post-recomendación, establecerlo
+                if not post_recommendation_state:
+                    store_interview_data(session_id, "post_recommendation_state", "ASKING_EMAIL")
+                    return "ASKING_EMAIL"
                 return "RECOMMENDING"
             else:
                 return "ANALYZING"
@@ -250,17 +259,27 @@ class IntelligentAgent:
             name_memory = retrieve_chat_memory(session_id, "name")
             email_memory = retrieve_chat_memory(session_id, "email")
             
-            # Si hay nombre en memoria, guardarlo en el perfil
+            # Si hay nombre o email en memoria, guardarlo en el perfil con TTL extendido
             if name_memory and name_memory.get("found"):
                 nombre = name_memory.get("memory_value", "")
                 if nombre:
-                    from tools.chat_memory import get_interview_data, store_interview_data
+                    from tools.chat_memory import get_interview_data, store_interview_data, store_chat_memory
                     profile = get_interview_data(session_id, "profile") or {}
                     if "informacion_personal" not in profile:
                         profile["informacion_personal"] = {}
                     profile["informacion_personal"]["nombre"] = nombre
-                    if email_memory and email_memory.get("found"):
-                        profile["informacion_personal"]["email"] = email_memory.get("memory_value", "")
+                    # Extender TTL de nombre a 60 minutos
+                    store_chat_memory(session_id, "name", nombre, ttl_minutes=60)
+                    
+            if email_memory and email_memory.get("found"):
+                email = email_memory.get("memory_value", "")
+                if email:
+                    profile = get_interview_data(session_id, "profile") or {}
+                    if "informacion_personal" not in profile:
+                        profile["informacion_personal"] = {}
+                    profile["informacion_personal"]["email"] = email
+                    # Extender TTL de email a 60 minutos
+                    store_chat_memory(session_id, "email", email, ttl_minutes=60)
                     store_interview_data(session_id, "profile", profile)
             
             # Si el usuario dice algo como "hola", "quiero información", etc.
@@ -352,6 +371,7 @@ class IntelligentAgent:
                 # Guardar flag de completado
                 from tools.chat_memory import store_interview_data
                 store_interview_data(session_id, "interview_complete", True)
+                store_interview_data(session_id, "completed", True)
 
                 tracer.log(
                     operation="INTERVIEW_COMPLETE",
@@ -364,9 +384,10 @@ class IntelligentAgent:
                 transition_message = result.get("message", "¡Perfecto! He recopilado toda la información.")
 
                 # Analizar y generar recomendación inmediatamente
+                # _analyze_and_recommend ya establece el estado post_recommendation_state a "ASKING_EMAIL"
                 recommendation = self._analyze_and_recommend(session_id)
 
-                return f"{transition_message}\n\n{recommendation}"
+                return recommendation  # Ya incluye la pregunta sobre email
 
             # Entrevista continúa → retornar siguiente pregunta
             next_question = result.get("next_question", "")
@@ -374,7 +395,13 @@ class IntelligentAgent:
 
             response = f"{next_question}"
             if progress:
-                response = f"[Progreso: {progress}]\n\n{response}"
+                # Solo mostrar el número de preguntas, sin el texto "preguntas completadas"
+                # Extraer solo el número del progreso
+                import re
+                number_match = re.search(r'\d+', progress)
+                if number_match:
+                    question_number = number_match.group()
+                    response = f"{question_number}\n\n{response}"
 
             return response
 
@@ -622,9 +649,73 @@ Si necesitas información detallada, no dudes en contactar admisiones:
         store_interview_data(session_id, "post_recommendation_state", "ASKING_EMAIL")
         return "📧 ¿Te gustaría recibir esta recomendación por correo electrónico? Responde 'sí' o 'no'."
 
+    def _get_user_email_and_name(self, session_id: str) -> tuple:
+        """
+        Obtener email y nombre del usuario desde múltiples fuentes.
+        
+        Returns:
+            tuple: (email, name) o (None, None) si no se encuentra
+        """
+        from tools.chat_memory import retrieve_chat_memory, store_chat_memory, store_interview_data, get_interview_data
+        from models.db import get_chat_user_by_email
+        
+        email = None
+        name = None
+        
+        # PRIORIDAD 1: Memoria del chat (con TTL extendido)
+        email_memory = retrieve_chat_memory(session_id, "email")
+        name_memory = retrieve_chat_memory(session_id, "name")
+        
+        if email_memory.get("found"):
+            email = email_memory.get("memory_value")
+        if name_memory.get("found"):
+            name = name_memory.get("memory_value")
+        
+        # PRIORIDAD 2: Perfil de la entrevista
+        if not email or not name:
+            profile = get_interview_data(session_id, "profile")
+            if profile:
+                info_personal = profile.get("informacion_personal", {})
+                if not email:
+                    email = info_personal.get("email")
+                if not name:
+                    name = info_personal.get("nombre")
+        
+        # PRIORIDAD 3: Base de datos de usuarios (si tenemos email pero no nombre)
+        if email and not name:
+            # Buscar en la base de datos
+            try:
+                user = get_chat_user_by_email(email)
+                if user and user.get("name"):
+                    name = user.get("name")
+            except Exception as e:
+                print(f"[WARNING] Error getting user from DB: {e}")
+                pass
+        
+        # Si encontramos información, guardarla en el perfil para persistencia
+        if email:
+            profile = get_interview_data(session_id, "profile") or {}
+            if "informacion_personal" not in profile:
+                profile["informacion_personal"] = {}
+            
+            if email:
+                profile["informacion_personal"]["email"] = email
+            if name:
+                profile["informacion_personal"]["nombre"] = name
+            
+            # Guardar perfil actualizado
+            store_interview_data(session_id, "profile", profile)
+            
+            # Extender TTL de memoria del chat (60 minutos para datos importantes)
+            if email:
+                store_chat_memory(session_id, "email", email, ttl_minutes=60)
+            if name:
+                store_chat_memory(session_id, "name", name, ttl_minutes=60)
+        
+        return (email, name or "Estudiante")
+
     def _handle_email_request(self, session_id: str, query: str) -> str:
         """Manejar solicitud de envío por email"""
-        from tools.chat_memory import retrieve_chat_memory
         from tools.email_service import get_email_service
         from models.db import create_contact_lead, update_contact_lead
         
@@ -632,55 +723,52 @@ Si necesitas información detallada, no dudes en contactar admisiones:
         wants_email = any(word in query_lower for word in ["sí", "si", "yes", "s", "quiero", "deseo", "envía", "envia"])
         
         if wants_email:
-            # Obtener email y nombre
-            email_memory = retrieve_chat_memory(session_id, "email")
-            name_memory = retrieve_chat_memory(session_id, "name")
-            
-            email = email_memory.get("memory_value") if email_memory.get("found") else None
-            name = name_memory.get("memory_value") if name_memory.get("found") else "Estudiante"
-            
-            if not email:
-                # Intentar obtener del perfil
-                profile = get_interview_data(session_id, "profile")
-                if profile:
-                    email = profile.get("informacion_personal", {}).get("email")
-                    name = profile.get("informacion_personal", {}).get("nombre") or name
+            # Obtener email y nombre desde múltiples fuentes
+            email, name = self._get_user_email_and_name(session_id)
             
             if email:
                 # Obtener recomendación y programas
                 recommendation = get_interview_data(session_id, "recommendation")
                 profiler_results = get_interview_data(session_id, "profiler_results")
+                profile = get_interview_data(session_id, "profile")
                 programs = profiler_results.get("top_matches", []) if profiler_results else []
                 
                 # Enviar email
-                email_service = get_email_service()
-                email_sent = email_service.send_recommendation_email(
-                    email=email,
-                    name=name or "Estudiante",
-                    recommendation=recommendation or "",
-                    programs=programs
-                )
-                
-                if email_sent:
-                    # Guardar en contact_leads
-                    try:
-                        create_contact_lead(
-                            email=email,
-                            name=name,
-                            profile_data=profile,
-                            recommendation_data=profiler_results,
-                            email_sent=True
-                        )
-                    except:
-                        pass
+                try:
+                    email_service = get_email_service()
+                    email_sent = email_service.send_recommendation_email(
+                        email=email,
+                        name=name,
+                        recommendation=recommendation or "",
+                        programs=programs
+                    )
                     
-                    # Continuar con pregunta de contacto
-                    store_interview_data(session_id, "post_recommendation_state", "ASKING_CONTACT")
-                    return f"✅ ¡Perfecto! He enviado tu recomendación a {email}.\n\n📞 ¿Te gustaría que un especialista de admisiones te contacte para ayudarte con más información? Responde 'sí' o 'no'."
-                else:
-                    return "❌ Hubo un error al enviar el correo. Por favor, verifica tu dirección de correo o contacta directamente a admisiones: 📧 admisiones.posgrados@icesi.edu.co"
+                    if email_sent:
+                        # Guardar en contact_leads
+                        try:
+                            create_contact_lead(
+                                email=email,
+                                name=name,
+                                profile_data=profile,
+                                recommendation_data=profiler_results,
+                                email_sent=True
+                            )
+                        except Exception as e:
+                            print(f"[WARNING] Error saving contact lead: {e}")
+                        
+                        # Continuar con pregunta de contacto
+                        store_interview_data(session_id, "post_recommendation_state", "ASKING_CONTACT")
+                        return f"✅ ¡Perfecto! He enviado tu recomendación a {email}.\n\n📞 ¿Te gustaría que un especialista de admisiones te contacte para ayudarte con más información? Responde 'sí' o 'no'."
+                    else:
+                        return "❌ Hubo un error al enviar el correo. Por favor, verifica tu dirección de correo o contacta directamente a admisiones: 📧 admisiones.posgrados@icesi.edu.co"
+                except Exception as e:
+                    print(f"[ERROR] Error sending email: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Hubo un error al enviar el correo: {str(e)}. Por favor, contacta directamente a admisiones: 📧 admisiones.posgrados@icesi.edu.co"
+                    
             else:
-                return "❌ No pude encontrar tu correo electrónico. Por favor, compártelo nuevamente."
+                return "❌ No pude encontrar tu correo electrónico. Por favor, compártelo nuevamente. Ejemplo: 'Mi correo es juan@ejemplo.com'"
         else:
             # No quiere email, preguntar directamente por contacto
             store_interview_data(session_id, "post_recommendation_state", "ASKING_CONTACT")
@@ -688,23 +776,14 @@ Si necesitas información detallada, no dudes en contactar admisiones:
 
     def _handle_contact_request(self, session_id: str, query: str) -> str:
         """Manejar solicitud de contacto por especialista"""
-        from tools.chat_memory import retrieve_chat_memory
         from models.db import create_contact_lead, update_contact_lead
         
         query_lower = query.lower().strip()
         wants_contact = any(word in query_lower for word in ["sí", "si", "yes", "s", "quiero", "deseo", "contacta", "contacto"])
         
-        # Obtener información del usuario
-        email_memory = retrieve_chat_memory(session_id, "email")
-        name_memory = retrieve_chat_memory(session_id, "name")
-        
-        email = email_memory.get("memory_value") if email_memory.get("found") else None
-        name = name_memory.get("memory_value") if name_memory.get("found") else None
-        
+        # Obtener información del usuario usando la función helper
+        email, name = self._get_user_email_and_name(session_id)
         profile = get_interview_data(session_id, "profile")
-        if profile:
-            email = email or profile.get("informacion_personal", {}).get("email")
-            name = name or profile.get("informacion_personal", {}).get("nombre")
         
         profiler_results = get_interview_data(session_id, "profiler_results")
         
@@ -849,6 +928,28 @@ Por favor, vuelve a proporcionarme tu correo electrónico y nombre para enviarte
 
             # Verificar OTP
             verification_result = verify_otp_code(email, otp_code, trace_id)
+
+            # Si la autenticación fue exitosa, guardar email y nombre en perfil y memoria extendida
+            if verification_result.get("success"):
+                from tools.chat_memory import store_chat_memory, store_interview_data, get_interview_data
+                
+                user = verification_result.get("user", {})
+                user_email = email
+                user_name = user.get("name") if user else None
+                
+                # Guardar en memoria del chat con TTL extendido (60 minutos)
+                store_chat_memory(session_id, "email", user_email, ttl_minutes=60)
+                if user_name:
+                    store_chat_memory(session_id, "name", user_name, ttl_minutes=60)
+                
+                # Guardar en el perfil de la entrevista
+                profile = get_interview_data(session_id, "profile") or {}
+                if "informacion_personal" not in profile:
+                    profile["informacion_personal"] = {}
+                profile["informacion_personal"]["email"] = user_email
+                if user_name:
+                    profile["informacion_personal"]["nombre"] = user_name
+                store_interview_data(session_id, "profile", profile)
 
             return verification_result.get("message", "Error en la verificación.")
 

@@ -442,7 +442,7 @@ INSTRUCCIONES:
                 all_questions[q.get("question_id", "")] = q
             for q in rag_questions:
                 all_questions[q.get("id", "")] = q
-            
+
             # Si aún no hay, buscar la pregunta actual desde las disponibles
             if not current_question_id:
                 # Obtener todas las preguntas y seleccionar la primera no respondida

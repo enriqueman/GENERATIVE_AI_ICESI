@@ -271,7 +271,7 @@ class IntelligentAgent:
                     # Extender TTL de nombre a 60 minutos
                     store_chat_memory(session_id, "name", nombre, ttl_minutes=60)
                     
-            if email_memory and email_memory.get("found"):
+                    if email_memory and email_memory.get("found"):
                 email = email_memory.get("memory_value", "")
                 if email:
                     profile = get_interview_data(session_id, "profile") or {}

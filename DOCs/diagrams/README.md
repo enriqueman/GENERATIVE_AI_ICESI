@@ -112,3 +112,4 @@ Cuando la arquitectura cambie:
 - [Mermaid](https://mermaid.js.org/)
 
 
+

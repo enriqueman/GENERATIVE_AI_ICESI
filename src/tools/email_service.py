@@ -254,3 +254,4 @@ def get_email_service() -> EmailService:
         _email_service_instance = EmailService()
     return _email_service_instance
 
+

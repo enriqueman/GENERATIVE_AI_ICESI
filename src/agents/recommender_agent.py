@@ -214,7 +214,7 @@ Genera una recomendación personalizada y motivadora. SIEMPRE usa el nombre del 
             )
             if not nombre or nombre == "None" or str(nombre).strip() == "":
                 nombre = "Estudiante"
-            
+
             # Generar recomendación
             chain = prompt | self.llm
             response = chain.invoke({

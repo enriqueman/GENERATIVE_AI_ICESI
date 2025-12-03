@@ -605,3 +605,5 @@ El sistema actual proporciona una base sólida para expansión en múltiples dir
 **Versión**: 1.0  
 **Autor**: Sistema de Recomendación de Posgrados ICESI
 
+
+

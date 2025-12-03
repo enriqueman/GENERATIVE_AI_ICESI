@@ -61,3 +61,5 @@ ls -lh "$GENERATED_DIR" 2>/dev/null || echo "   (ningún archivo generado)"
 
 
 
+
+

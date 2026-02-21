@@ -1,32 +1,56 @@
-# Core LangChain packages
-langchain-chroma==0.2.6
-langchain-openai
-langchain-core
-langchain-text-splitters
-langchain-community
+# EcoMarket RAG System - Dependencies
+# Core application dependencies
+
+# Streamlit and web framework
+streamlit>=1.28.0
+streamlit-chat>=0.1.1
+
+# AI and ML libraries
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.3.0
+langchain-text-splitters>=0.3.0
+openai>=2.0.0
+tiktoken>=0.12.0
 
 # Vector database
-chromadb
+chromadb>=0.4.0
+langchain-chroma>=0.1.0
 
 # Document processing
-pypdf
-docx2txt
-unstructured
-beautifulsoup4
-lxml
-markdown
+python-docx>=0.8.11
+pypdf>=4.0.0
+python-dotenv>=1.0.0
+django-environ>=0.11.0
+unstructured>=0.10.0
+openpyxl>=3.1.0
+networkx>=3.0
 
-# Web framework
-streamlit
+# HTTP and API
+httpx>=0.24.0
+requests>=2.27.0
 
-# Environment management
-python-environ
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
 
-# Database
-sqlite3
+# Utilities
+python-dateutil>=2.8.0
+pydantic>=2.7.4
 
-# HTTP requests
-requests
+# Security
+bcrypt>=4.0.0
+cryptography>=41.0.0
 
-# Additional utilities
-nltk
+# File handling
+filetype>=1.2.0
+
+# Tracing and observability
+langsmith>=0.1.0
+streamlit-aggrid>=0.3.3
+
+# Google OAuth and email
+google-auth>=2.23.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.2.0

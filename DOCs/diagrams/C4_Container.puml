@@ -1,0 +1,40 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Diagrama de Contenedores - Sistema de Recomendación de Posgrados ICESI
+
+Person(estudiante, "Estudiante Prospectivo", "Usuario del sistema")
+Person(admin, "Administrador", "Personal administrativo")
+
+System_Boundary(sistema, "Sistema de Recomendación de Posgrados ICESI") {
+    Container(web_app, "Aplicación Web", "Streamlit", "Interfaz de usuario para chat y administración")
+    Container(backend, "Backend Python", "Python 3.13", "Lógica de negocio, agentes inteligentes y herramientas")
+    ContainerDb(sqlite, "Base de Datos SQLite", "SQLite", "Almacena metadatos, sesiones, usuarios y mensajes")
+    ContainerDb(chromadb, "Base de Datos Vectorial", "ChromaDB", "Almacena embeddings y documentos para RAG")
+    Container(archivos, "Sistema de Archivos", "File System", "Documentos fuente, archivos temporales y persistencia")
+}
+
+System_Ext(openai, "OpenAI API", "Servicios de IA")
+System_Ext(smtp, "Servidor SMTP", "Correo electrónico")
+System_Ext(google_oauth, "Google OAuth", "Autenticación")
+System_Ext(langsmith, "LangSmith", "Observabilidad")
+
+Rel(estudiante, web_app, "Usa", "HTTPS")
+Rel(admin, web_app, "Administra", "HTTPS")
+Rel(web_app, backend, "Invoca", "Python API")
+Rel(backend, sqlite, "Lee y escribe", "SQL")
+Rel(backend, chromadb, "Consulta vectores", "ChromaDB API")
+Rel(backend, archivos, "Lee y escribe", "File I/O")
+Rel(backend, openai, "Obtiene embeddings y LLM", "HTTPS/REST")
+Rel(backend, smtp, "Envía emails", "SMTP")
+Rel(backend, google_oauth, "Autentica", "OAuth 2.0")
+Rel(backend, langsmith, "Envía trazas", "HTTPS/REST")
+
+@enduml
+
+
+
+
+

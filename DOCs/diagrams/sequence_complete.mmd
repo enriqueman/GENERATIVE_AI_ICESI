@@ -1,0 +1,77 @@
+sequenceDiagram
+    participant E as Estudiante
+    participant W as WebApp
+    participant IA as Intelligent Agent
+    participant OTP as OTP Auth
+    participant I as Interviewer Agent
+    participant P as Profiler Agent
+    participant R as Recommender Agent
+    participant RAG as RAG Agent
+    participant DB as SQLite
+    participant VDB as ChromaDB
+    participant OAI as OpenAI API
+
+    Note over E,OAI: Autenticación
+    E->>W: Email + Nombre
+    W->>IA: process_query()
+    IA->>OTP: send_otp_to_user()
+    OTP->>DB: Guarda código
+    OTP->>SMTP: Envía email
+    OTP-->>IA: Código enviado
+    IA-->>W: "Código enviado"
+    W-->>E: Solicita código
+    
+    E->>W: Código OTP
+    W->>IA: process_query(código)
+    IA->>OTP: verify_otp_code()
+    OTP->>DB: Verifica código
+    OTP-->>IA: Autenticado
+    IA-->>W: "Autenticación exitosa"
+    W-->>E: Acceso autorizado
+
+    Note over E,OAI: Entrevista
+    E->>W: "Quiero información"
+    W->>IA: process_query()
+    IA->>I: start_interview()
+    I->>DB: Inicializa sesión
+    I-->>IA: Primera pregunta
+    IA-->>W: Muestra pregunta
+    W-->>E: "¿Cuál es tu nombre?"
+    
+    loop Preguntas
+        E->>W: Responde
+        W->>IA: process_query()
+        IA->>I: process_answer()
+        I->>DB: Guarda respuesta
+        I-->>IA: Siguiente pregunta
+        IA-->>W: Nueva pregunta
+        W-->>E: Pregunta
+    end
+
+    Note over E,OAI: Análisis y Recomendación
+    E->>W: "No más preguntas"
+    W->>IA: process_query()
+    IA->>P: analyze_profile()
+    P->>DB: Obtiene perfil
+    P->>OAI: Calcula matches
+    OAI-->>P: Rankings
+    P-->>IA: Resultados
+    
+    IA->>R: generate_recommendation()
+    R->>RAG: Busca información
+    RAG->>VDB: Búsqueda semántica
+    VDB-->>RAG: Documentos
+    RAG->>OAI: Genera contexto
+    OAI-->>RAG: Contexto
+    RAG-->>R: Información
+    R->>OAI: Genera recomendación
+    OAI-->>R: Recomendación
+    R-->>IA: Recomendación completa
+    IA->>DB: Guarda recomendación
+    IA-->>W: Muestra recomendación
+    W-->>E: Recomendación personalizada
+
+
+
+
+

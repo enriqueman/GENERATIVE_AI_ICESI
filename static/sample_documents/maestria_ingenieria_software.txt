@@ -1,0 +1,267 @@
+MAESTRÍA EN INGENIERÍA DE SOFTWARE
+Universidad ICESI - Facultad de Ingeniería
+
+==================================================
+INFORMACIÓN GENERAL
+==================================================
+
+La Maestría en Ingeniería de Software de la Universidad ICESI forma profesionales especializados en el diseño, desarrollo y gestión de sistemas de software complejos, con énfasis en arquitecturas modernas, DevOps, y metodologías ágiles.
+
+Duración: 4 semestres (2 años)
+Modalidad: Presencial con flexibilidad virtual
+Horario: Viernes 6:00 PM - 10:00 PM y Sábados 8:00 AM - 5:00 PM
+Inicio de clases: Febrero y Agosto de cada año
+
+==================================================
+PERFIL DEL CANDIDATO
+==================================================
+
+Este programa está dirigido a:
+- Ingenieros de Sistemas, Software o Computación
+- Desarrolladores de software con experiencia profesional
+- Arquitectos de software que buscan actualización
+- Líderes técnicos y tech leads
+- Profesionales interesados en arquitecturas de software modernas
+
+Experiencia laboral recomendada: Mínimo 2 años en desarrollo de software
+
+==================================================
+REQUISITOS DE INGRESO
+==================================================
+
+- Título profesional en Ingeniería de Sistemas, Software, Computación o afines
+- Experiencia demostrable en desarrollo de software (portafolio de proyectos)
+- Conocimientos sólidos de programación orientada a objetos
+- Conocimiento de al menos un lenguaje de programación moderno (Java, Python, JavaScript, C#)
+- Nivel de inglés B1 o superior
+- Examen técnico de programación y diseño de software
+- Entrevista con el director del programa
+
+==================================================
+PLAN DE ESTUDIOS
+==================================================
+
+SEMESTRE 1 - FUNDAMENTOS AVANZADOS:
+- Arquitectura de Software
+- Patrones de Diseño Avanzados
+- Ingeniería de Requisitos
+- Metodologías Ágiles y Scrum Avanzado
+
+SEMESTRE 2 - DESARROLLO MODERNO:
+- Microservicios y Arquitecturas Distribuidas
+- DevOps y CI/CD
+- Desarrollo de APIs REST y GraphQL
+- Testing Automatizado y Calidad de Software
+
+SEMESTRE 3 - TECNOLOGÍAS EMERGENTES:
+- Computación en la Nube (AWS, Azure, GCP)
+- Contenedores y Kubernetes
+- Arquitecturas Serverless
+- Seguridad en Aplicaciones Web
+
+SEMESTRE 4 - ESPECIALIZACIÓN:
+- Proyecto de Grado (desarrollo de software real)
+- Electiva de Profundización:
+  * Frontend Avanzado (React, Angular, Vue)
+  * Backend y APIs de Alto Rendimiento
+  * Arquitectura de Datos y Big Data
+  * IoT y Edge Computing
+  * Blockchain y Web3
+
+==================================================
+COMPETENCIAS QUE DESARROLLARÁS
+==================================================
+
+- Diseño de arquitecturas de software escalables
+- Implementación de microservicios y sistemas distribuidos
+- Automatización con DevOps y CI/CD
+- Gestión de proyectos de software con metodologías ágiles
+- Desarrollo de APIs robustas y seguras
+- Optimización del rendimiento de aplicaciones
+- Implementación en cloud (AWS, Azure, Google Cloud)
+- Testing automatizado y aseguramiento de calidad
+- Liderazgo técnico de equipos de desarrollo
+- Gestión de deuda técnica y refactoring
+
+==================================================
+SALIDAS LABORALES
+==================================================
+
+Los egresados pueden desempeñarse como:
+- Arquitecto de Software
+- Tech Lead / Engineering Manager
+- DevOps Engineer
+- Cloud Solutions Architect
+- Software Engineer Senior
+- Full Stack Developer Senior
+- Consultor en Ingeniería de Software
+- CTO (Chief Technology Officer) en startups
+
+Sectores de alta demanda:
+- Empresas de tecnología y software houses
+- Startups tecnológicas
+- Empresas de consultoría TI
+- Sector financiero (fintech)
+- E-commerce y marketplaces
+- Empresas con transformación digital
+- Outsourcing y nearshoring
+
+==================================================
+STACK TECNOLÓGICO
+==================================================
+
+El programa cubre tecnologías modernas:
+
+Backend:
+- Java (Spring Boot)
+- Python (Django, FastAPI)
+- Node.js (Express, NestJS)
+- Go para servicios de alto rendimiento
+
+Frontend:
+- React y Next.js
+- Angular
+- Vue.js
+- TypeScript
+
+Cloud & DevOps:
+- AWS (EC2, Lambda, S3, RDS)
+- Azure (App Service, Functions)
+- Google Cloud Platform
+- Docker y Kubernetes
+- Jenkins, GitLab CI, GitHub Actions
+
+Bases de Datos:
+- PostgreSQL, MySQL
+- MongoDB, DynamoDB
+- Redis para caching
+- Elasticsearch
+
+==================================================
+INVERSIÓN Y FINANCIAMIENTO
+==================================================
+
+Inversión por semestre: $11,000,000 COP
+Inversión total programa: $44,000,000 COP
+
+Opciones de financiamiento:
+- Descuento del 15% por pago de contado semestral
+- Crédito ICETEX con tasa preferencial
+- Becas por mérito académico (hasta 30%)
+- Becas para proyectos de emprendimiento tecnológico
+- Convenios con empresas de tecnología (descuento del 20%)
+
+==================================================
+INFRAESTRUCTURA Y LABORATORIOS
+==================================================
+
+- Laboratorios de desarrollo con estaciones de trabajo de alto rendimiento
+- Créditos en AWS, Azure y Google Cloud para prácticas
+- Acceso a GitHub Copilot y herramientas de IA
+- Licencias de JetBrains (IntelliJ, PyCharm, WebStorm)
+- Servidores dedicados para despliegue de proyectos
+- Entorno de DevOps completo (Jenkins, SonarQube, Grafana)
+- Laboratorio de IoT con dispositivos reales
+
+==================================================
+PROYECTOS Y METODOLOGÍA
+==================================================
+
+El programa tiene fuerte componente práctico:
+- Cada curso incluye proyecto aplicado
+- Trabajo con empresas reales como clientes
+- Hackathons internos cada semestre
+- Proyecto de grado debe ser software en producción
+- Metodología Scrum en todos los proyectos
+- Code reviews y pair programming
+
+==================================================
+CONVENIOS CON EMPRESAS
+==================================================
+
+La Universidad ICESI tiene alianzas con:
+- Google Cloud (certificaciones incluidas)
+- AWS Educate (créditos de $300 USD por estudiante)
+- Microsoft Azure (acceso a recursos premium)
+- GitHub Education Pack
+- Empresas locales: Mercado Libre, Rappi, Nu Bank
+- Posibilidad de prácticas remuneradas
+
+==================================================
+CERTIFICACIONES INCLUIDAS
+==================================================
+
+Durante el programa puedes obtener:
+- AWS Certified Solutions Architect - Associate
+- Google Cloud Professional Certificate
+- Certified Kubernetes Administrator (CKA)
+- Scrum Master Certification (opcional)
+
+==================================================
+PROFESORADO
+==================================================
+
+- 70% de profesores con PhD en Computer Science o Ingeniería
+- 100% con experiencia práctica en la industria
+- Profesores con experiencia en FAANG (Facebook, Amazon, Apple, Netflix, Google)
+- Visiting professors de universidades internacionales
+- Speakers de empresas tecnológicas líderes
+
+==================================================
+LÍNEAS DE INVESTIGACIÓN
+==================================================
+
+El programa apoya investigación en:
+- Arquitecturas de software
+- DevOps y automatización
+- Computación en la nube
+- Internet de las Cosas (IoT)
+- Seguridad en aplicaciones
+- Inteligencia artificial aplicada al desarrollo
+- Blockchain y tecnologías descentralizadas
+
+==================================================
+EVENTOS Y NETWORKING
+==================================================
+
+- Conferencia anual "ICESI Software Engineering Summit"
+- Meetups mensuales con la comunidad tech de Cali
+- Visitas a empresas tecnológicas
+- Participación en hackathons nacionales e internacionales
+- Networking con egresados en empresas tech
+
+==================================================
+INFORMACIÓN DE CONTACTO
+==================================================
+
+Coordinación del Programa:
+Dr. Carlos Andrés Delgado
+Email: maestria.software@icesi.edu.co
+Teléfono: +57 (2) 555-2000 ext. 8456
+WhatsApp: +57 315 987 6543
+
+Oficina de Admisiones Posgrados:
+Email: admisiones.ingenieria@icesi.edu.co
+Dirección: Campus Universidad ICESI
+Edificio de Ingeniería, Piso 3
+
+Sitio web: www.icesi.edu.co/maestria-ingenieria-software
+
+==================================================
+TESTIMONIOS DE EGRESADOS
+==================================================
+
+"La maestría me permitió pasar de developer a arquitecto de software. Ahora lidero el equipo de arquitectura en una fintech." - Ana María Torres, Egresada 2022
+
+"El enfoque práctico y las herramientas modernas me dieron la confianza para emprender mi propia startup tecnológica." - Juan Camilo Ríos, Egresado 2021
+
+"Los proyectos reales con empresas me abrieron las puertas para trabajar como tech lead en Mercado Libre." - Sebastián Gómez, Egresado 2023
+
+==================================================
+DOBLE TITULACIÓN
+==================================================
+
+Oportunidad de doble titulación con:
+- Universidad Politécnica de Madrid - España
+- Tecnológico de Monterrey - México
+- Requisito: Cursar 1 semestre en la universidad aliada

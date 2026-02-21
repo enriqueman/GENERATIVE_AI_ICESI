@@ -1,0 +1,328 @@
+MAESTRÍA EN MARKETING DIGITAL Y ANALÍTICA
+Universidad ICESI - Facultad de Ciencias Administrativas y Económicas
+
+==================================================
+INFORMACIÓN GENERAL
+==================================================
+
+La Maestría en Marketing Digital y Analítica de la Universidad ICESI forma profesionales capaces de diseñar, implementar y medir estrategias de marketing digital data-driven, utilizando herramientas de analítica avanzada y tecnologías emergentes.
+
+Duración: 18 meses (3 semestres intensivos)
+Modalidad: Híbrida (50% presencial, 50% virtual)
+Horario: Jueves 6:00 PM - 10:00 PM y Sábados 8:00 AM - 4:00 PM
+Inicio de clases: Marzo y Septiembre de cada año
+
+==================================================
+PERFIL DEL CANDIDATO
+==================================================
+
+Este programa está dirigido a:
+- Profesionales en Marketing, Comunicación o Publicidad
+- Administradores de empresas con experiencia en ventas/marketing
+- Emprendedores con negocios digitales
+- Community Managers que buscan profundizar conocimientos
+- Profesionales en transformación digital
+- Analistas de datos interesados en marketing
+
+Experiencia laboral recomendada: Mínimo 1 año en áreas de marketing, ventas o comunicación
+
+==================================================
+REQUISITOS DE INGRESO
+==================================================
+
+- Título profesional universitario en cualquier área
+- Conocimientos básicos de marketing (se ofrece nivelación)
+- Portafolio de campañas digitales (si aplica)
+- Nivel de inglés B1 o superior
+- Examen de aptitud en pensamiento analítico
+- Caso práctico de marketing digital
+- Entrevista con el director del programa
+
+==================================================
+PLAN DE ESTUDIOS
+==================================================
+
+SEMESTRE 1 - FUNDAMENTOS DIGITALES:
+- Fundamentos de Marketing Digital
+- Consumer Behavior en Entornos Digitales
+- Analítica Web y Google Analytics 4
+- Social Media Marketing Estratégico
+- SEO y SEM Avanzado
+- Email Marketing y Marketing Automation
+
+SEMESTRE 2 - ESTRATEGIA Y ANALÍTICA:
+- Marketing de Contenidos y Storytelling Digital
+- Publicidad Programática
+- Data-Driven Marketing
+- CRM y Customer Journey Mapping
+- E-commerce y Conversion Rate Optimization
+- Influencer Marketing y Branded Content
+
+SEMESTRE 3 - INNOVACIÓN Y PROYECTO:
+- Growth Hacking y Growth Marketing
+- Marketing Analytics con Python y R
+- Inteligencia Artificial en Marketing
+- Taller de Estrategia Digital 360°
+- Proyecto de Grado (Campaña Digital Real)
+- Electivas de Profundización:
+  * Performance Marketing Avanzado
+  * Video Marketing y Producción de Contenido
+  * Marketing de Apps Móviles
+  * E-commerce Omnicanal
+
+==================================================
+COMPETENCIAS QUE DESARROLLARÁS
+==================================================
+
+- Diseño de estrategias de marketing digital integrales
+- Gestión de campañas en múltiples canales digitales
+- Analítica de datos para toma de decisiones de marketing
+- Optimización de conversiones y customer acquisition
+- Creación de contenido digital atractivo
+- Gestión de presupuestos de pauta digital
+- Uso de herramientas de automation y CRM
+- Growth hacking y experimentación
+- Medición de ROI y KPIs digitales
+- Gestión de comunidades y reputación online
+
+==================================================
+HERRAMIENTAS QUE DOMINARÁS
+==================================================
+
+Analítica y Medición:
+- Google Analytics 4
+- Google Tag Manager
+- Google Data Studio / Looker Studio
+- Meta Business Suite (Facebook Ads)
+- Hotjar y Crazy Egg
+
+Publicidad Digital:
+- Google Ads (Search, Display, Video, Shopping)
+- Meta Ads (Facebook e Instagram)
+- LinkedIn Ads
+- TikTok Ads
+- Programmatic Advertising (DV360)
+
+Automatización y CRM:
+- HubSpot
+- Salesforce Marketing Cloud
+- Mailchimp / ActiveCampaign
+- Zapier para automatización
+
+SEO y Contenido:
+- SEMrush / Ahrefs
+- Moz Pro
+- WordPress y gestores de contenido
+- Canva y herramientas de diseño
+
+Analítica Avanzada:
+- Python para Marketing Analytics
+- R para análisis estadístico
+- Tableau / Power BI
+- SQL para bases de datos de clientes
+
+==================================================
+SALIDAS LABORALES
+==================================================
+
+Los egresados pueden desempeñarse como:
+- Gerente de Marketing Digital
+- Digital Marketing Manager
+- Growth Marketing Manager
+- Performance Marketing Specialist
+- SEO/SEM Specialist Senior
+- Social Media Manager
+- E-commerce Manager
+- Marketing Analytics Manager
+- Content Marketing Manager
+- Consultor en Marketing Digital
+
+Sectores de alta demanda:
+- Agencias de marketing digital
+- E-commerce y retail
+- Startups y scaleups
+- Empresas de consumo masivo
+- Sector financiero y fintech
+- Medios digitales y publishers
+- Consultoría y servicios
+
+==================================================
+INVERSIÓN Y FINANCIAMIENTO
+==================================================
+
+Inversión por semestre: $9,500,000 COP
+Inversión total programa: $28,500,000 COP
+
+Opciones de financiamiento:
+- Descuento del 12% por pago de contado del programa completo
+- Crédito ICETEX (plazo hasta 5 años)
+- Becas por mérito académico (hasta 25%)
+- Becas para emprendedores digitales (20%)
+- Convenios empresariales (descuento del 15%)
+- Crédito directo con la universidad (6 meses sin intereses)
+
+==================================================
+CERTIFICACIONES INCLUIDAS
+==================================================
+
+El programa incluye preparación y vouchers para:
+- Google Ads Certification (Search, Display, Video)
+- Google Analytics Individual Qualification
+- Meta Blueprint Certification
+- HubSpot Content Marketing Certification
+- Google Digital Marketing & E-commerce Certificate
+
+Valor aproximado de las certificaciones: $1,500 USD
+
+==================================================
+PROYECTO DE GRADO
+==================================================
+
+Dos modalidades:
+1. Campaña Digital Real: Diseñar y ejecutar una campaña digital completa para una empresa real, con presupuesto y métricas de éxito.
+
+2. Plan de Marketing Digital: Desarrollar un plan estratégico de marketing digital 360° para una empresa o proyecto propio.
+
+Ambos incluyen:
+- Presentación ante jurados de la industria
+- Posibilidad de implementación real
+- Pitch ante empresas interesadas
+
+==================================================
+LABORATORIOS Y RECURSOS
+==================================================
+
+- Laboratorio de Analítica Web con simuladores
+- Presupuesto de $500 USD por estudiante para campañas reales
+- Licencias premium de todas las herramientas mencionadas
+- Estudio de grabación para contenido de video
+- Acceso a bases de datos de Nielsen y Kantar
+- Suscripciones a plataformas de tendencias (Think with Google, Meta IQ)
+
+==================================================
+METODOLOGÍA PRÁCTICA
+==================================================
+
+- 70% práctica, 30% teoría
+- Casos reales de empresas colombianas y globales
+- Simuladores de campañas digitales
+- Hackathons de marketing cada semestre
+- Proyectos con presupuesto real de pauta
+- Guest speakers de Google, Meta, Amazon
+
+==================================================
+CONVENIOS CON EMPRESAS
+==================================================
+
+Alianzas estratégicas con:
+- Google (Google Partners y acceso a recursos premium)
+- Meta Business (certificaciones y capacitación)
+- HubSpot Academy
+- LinkedIn Marketing Solutions
+- Mercado Libre
+- Rappi
+- Agencias digitales: Wunderman Thompson, Publicis, OMD
+
+==================================================
+PROGRAMA DE INMERSIÓN
+==================================================
+
+El programa incluye:
+- Visita a agencias digitales líderes en Bogotá o Medellín
+- Networking event con CMOs de empresas top
+- Opcional: Visita a Silicon Valley o eventos como SXSW (costo adicional)
+
+==================================================
+PROFESORADO
+==================================================
+
+- 60% de profesores con experiencia en agencias y empresas digitales
+- 40% académicos con investigación en marketing
+- Guest lecturers de Google, Meta, Amazon
+- Profesores certificados en Google y Facebook
+- Emprendedores digitales exitosos
+
+==================================================
+LÍNEAS DE INVESTIGACIÓN
+==================================================
+
+- Comportamiento del consumidor digital
+- Inteligencia artificial en marketing
+- Marketing de influencers
+- E-commerce y omnicanalidad
+- Neuromarketing digital
+- Marketing sostenible y propósito de marca
+
+==================================================
+ACTUALIZACIÓN CONTINUA
+==================================================
+
+El marketing digital cambia rápido. Por eso ofrecemos:
+- Webinars mensuales sobre nuevas herramientas
+- Acceso de por vida a materiales actualizados
+- Comunidad de práctica con egresados
+- Descuentos en cursos de actualización (50% off)
+
+==================================================
+EMPRENDIMIENTO DIGITAL
+==================================================
+
+Componente especial para emprendedores:
+- Asesoría para lanzamiento de negocios digitales
+- Pitch ante inversionistas
+- Acceso a red de mentores empresariales
+- Posibilidad de incubación en ICESI Emprende
+
+==================================================
+INFORMACIÓN DE CONTACTO
+==================================================
+
+Coordinadora del Programa:
+Dra. Luisa Fernanda Vargas
+Email: maestria.marketingdigital@icesi.edu.co
+Teléfono: +57 (2) 555-2000 ext. 8567
+WhatsApp: +57 317 654 3210
+
+Asesor de Admisiones:
+Andrés Calle
+Email: andres.calle@icesi.edu.co
+Celular: +57 321 234 5678
+
+Dirección: Campus Universidad ICESI
+Edificio de Ciencias Administrativas, Piso 4
+Cali, Colombia
+
+Sitio web: www.icesi.edu.co/maestria-marketing-digital
+
+Instagram: @icesi_marketingdigital
+LinkedIn: Universidad ICESI - Marketing Digital
+
+==================================================
+TESTIMONIOS DE EGRESADOS
+==================================================
+
+"Pasé de ser community manager a liderar la estrategia digital de toda la compañía. Las herramientas que aprendí fueron clave." - Carolina Muñoz, Gerente de Marketing Digital en Falabella
+
+"La maestría me dio las bases para crear mi propia agencia digital. Hoy tenemos 20 clientes y 15 colaboradores." - Diego Martínez, CEO de DigiGrowth Agency
+
+"Aprendí a hablar el idioma de los datos. Eso me diferencia de otros marketeros tradicionales." - Valentina Sánchez, Head of Growth en startup fintech
+
+==================================================
+OPORTUNIDADES LABORALES
+==================================================
+
+Convenio de empleabilidad:
+- Bolsa de empleo exclusiva para estudiantes y egresados
+- 85% de tasa de empleabilidad a 6 meses de graduación
+- Salario promedio de egresados: $5,500,000 - $8,000,000 COP/mes
+- Networking events trimestrales con headhunters
+
+==================================================
+SESIONES INFORMATIVAS
+==================================================
+
+Asiste a nuestras sesiones virtuales gratuitas:
+- Cada martes 6:00 PM (registro en sitio web)
+- Conoce el programa, profesores y casos de éxito
+- Resuelve tus dudas en vivo
+- Recibe asesoría personalizada
